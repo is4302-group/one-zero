@@ -72,7 +72,9 @@ contract Storage {
     }
 
     modifier onlyOneZeroOrOwner() {
-        require(msg.sender == oneZeroContractAddress || msg.sender == owner, "Only OneZero and owner can call this function");
+        require(
+            msg.sender == oneZeroContractAddress || msg.sender == owner, "Only OneZero and owner can call this function"
+        );
         _;
     }
 
@@ -105,7 +107,7 @@ contract Storage {
     // Function to add OneZero contract address
     // - OneZero contract needs the address of this contract to call functions, therefore this contract is deployed first
     // - Function therefore required to specify the address of the OneZero contract for access control
-    function setOneZeroAddress(address _oneZeroContractAddress) public onlyOwner() {
+    function setOneZeroAddress(address _oneZeroContractAddress) public onlyOwner {
         oneZeroContractAddress = _oneZeroContractAddress;
     }
 
@@ -133,36 +135,36 @@ contract Storage {
     }
 
     // Function to retrieve all binary options that a user has participated in
-    function readUserParticipatedOptions(address _user) public onlyOneZeroOrOwner() view returns (uint256[] memory) {
+    function readUserParticipatedOptions(address _user) public view onlyOneZeroOrOwner returns (uint256[] memory) {
         return userParticipatedOptions[_user];
     }
 
     // Function to retrieve all active binary options
     // - Sorting may exceed gas limit if array is too large, hence sorting will be done off-chain by backend/frontend
-    function readActiveBinaryOptions() public onlyOneZeroOrOwner() view returns (uint256[] memory) {
+    function readActiveBinaryOptions() public view onlyOneZeroOrOwner returns (uint256[] memory) {
         return activeBinaryOptions; // not sorted
     }
 
     // Function to retrieve all concluded binary options
     // - Sorting may exceed gas limit if array is too large, hence sorting will be done off-chain by backend/frontend
-    function readConcludedBinaryOptions() public onlyOneZeroOrOwner() view returns (uint256[] memory) {
+    function readConcludedBinaryOptions() public view onlyOneZeroOrOwner returns (uint256[] memory) {
         return concludedBinaryOptions; // not sorted
     }
 
     // Function to retrieve user's long position in a binary option
-    function readUserLongPosition(uint256 _id, address _user) public onlyOneZeroOrOwner() view returns (uint256) {
+    function readUserLongPosition(uint256 _id, address _user) public view onlyOneZeroOrOwner returns (uint256) {
         binaryOption storage option = binaryOptions[_id];
         return (option.longs[_user]);
     }
 
     // Function to retrieve user's long position in a binary option
-    function readUserShortPosition(uint256 _id, address _user) public onlyOneZeroOrOwner() view returns (uint256) {
+    function readUserShortPosition(uint256 _id, address _user) public view onlyOneZeroOrOwner returns (uint256) {
         binaryOption storage option = binaryOptions[_id];
         return (option.shorts[_user]);
     }
 
     // Function to retrieve current value of binaryOptionCounter
-    function readBinaryOptionCounter() public onlyOneZeroOrOwner() view returns (uint256) {
+    function readBinaryOptionCounter() public view onlyOneZeroOrOwner returns (uint256) {
         return binaryOptionCounter;
     }
 
@@ -187,10 +189,14 @@ contract Storage {
     // Function contains logic that could potentially cost alot of gas
     // - Specifically, adding the id of the binary option to the userParticipatedOptions array could cost alot of gas if it gets too large
     // - Potential workaround: limit the history of binary options that a user has participated in
-    function createPosition(uint256 _id, address _user, uint256 _amount, bool _predictedOutcome) public onlyOneZero() returns (bool) {
+    function createPosition(uint256 _id, address _user, uint256 _amount, bool _predictedOutcome)
+        public
+        onlyOneZero
+        returns (bool)
+    {
         binaryOption storage option = binaryOptions[_id]; // Retrieve binary option
         uint256 commission = _amount * option.commissionRate / BASIS_POINTS_DIVISOR;
-        option.commissionCollected +=  commission; // Record commission
+        option.commissionCollected += commission; // Record commission
 
         bool previousLongPosition = option.longs[_user] != 0;
         bool previousShortPosition = option.shorts[_user] != 0;
@@ -199,14 +205,18 @@ contract Storage {
             userParticipatedOptions[_user].push(_id); // Add binary option to user's participated options
         }
 
-        if (_predictedOutcome) { // Opening long position
-            if (!previousLongPosition) { // New long position
+        if (_predictedOutcome) {
+            // Opening long position
+            if (!previousLongPosition) {
+                // New long position
                 option.longStakers.push(_user); // Record address of new long staker
             }
             option.longs[_user] += (_amount - commission); // Add long to user
             option.totalLongs += (_amount - commission); // Add long to total longs
-        } else { // Opening short position
-            if (!previousShortPosition) { // New short position
+        } else {
+            // Opening short position
+            if (!previousShortPosition) {
+                // New short position
                 option.shortStakers.push(_user);
             }
             option.shorts[_user] += (_amount - commission); // Add short to user
@@ -221,9 +231,11 @@ contract Storage {
     // - Potential workaround: none on-chain but will be resolved if data storage is shifted off-chain
     function endBinaryOption(uint256 _id, bool _outcome) public onlyOneZero() returns (bool) {
         binaryOption storage option = binaryOptions[_id]; // Retrieve binary option
-        if (_outcome) { // Outcome is true
+        if (_outcome) {
+            // Outcome is true
             option.outcome = Outcome.long; // Set outcome to long
-        } else { // Outcome is false
+        } else {
+            // Outcome is false
             option.outcome = Outcome.short; // Set outcome to short
         }
         // Remove concluded binary option from activeBinaryOptions array (specific steps taken to perform removal in O(1) time)

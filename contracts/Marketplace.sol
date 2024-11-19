@@ -294,9 +294,6 @@ contract OneZero is AutomationCompatibleInterface {
     }
 }
 
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.27;
-
 contract Marketplace {
     enum Role {
         User,
