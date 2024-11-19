@@ -5,17 +5,15 @@ pragma solidity ^0.8.27;
 // import "hardhat/console.sol"; // Uncomment this line to use console.log
 import "./Storage.sol";
 import "./OZ.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
 contract OneZero is AutomationCompatibleInterface {
     // State variables
     // - Consider setting to public as required for automatically generated getter functions
-    ERC20 usdc;
     OZ oz;
     Storage storageContract;
-    address owner;
-    uint256 minimumPeriod; // Minimum period for a binary option in seconds
+    address private owner;
+    uint256 private minimumPeriod; // Minimum period for a binary option in seconds
 
 
     // Enums
@@ -63,8 +61,7 @@ contract OneZero is AutomationCompatibleInterface {
 
 
     // Constructor
-    constructor(address _usdcAddress, address payable _ozAddress, address payable _storageContractAddress) {
-        usdc = ERC20(_usdcAddress); // Instantiate usdc smart contract
+    constructor(address payable _ozAddress, address payable _storageContractAddress) {
         oz = OZ(_ozAddress);
 
         storageContract = Storage(_storageContractAddress); // Instantiate storage contract
@@ -85,6 +82,16 @@ contract OneZero is AutomationCompatibleInterface {
 
 
     // Public and external functions
+    // Function to retrive owner of the contract
+    function getOwner() public view returns (address) {
+        return owner;
+    }
+
+    // Function to retrieve minimum period of a binary option
+    function getMinimumPeriod() public view returns (uint256) {
+        return minimumPeriod;
+    }
+
     // Function to retrieve all details for a binary option
     function getBinaryOption(uint256 _id) public validBinaryOption(_id) view returns (Storage.sanitisedBinaryOption memory) {
         return storageContract.readBinaryOption(_id);
@@ -131,19 +138,15 @@ contract OneZero is AutomationCompatibleInterface {
     }
 
     // Function to add position to binary option
-    // - _amount here should already be adjusted for USDC (i.e., to stake 100 USDC, _amount should be 100 * 1e6)
-    function addPosition(uint256 _id, uint256 _amount, bool _predictedOutcome) public validStake(_amount) validBinaryOption(_id) activeBinaryOption(_id) {
+    function addPosition(uint256 _id, bool _predictedOutcome) public validStake(msg.value) validBinaryOption(_id) activeBinaryOption(_id) payable {
         // Add position to binary option
-        bool success = storageContract.createPosition(_id, msg.sender, _amount, _predictedOutcome);
+        bool success = storageContract.createPosition(_id, msg.sender, msg.value, _predictedOutcome);
         require(success, "Failed to add position");
 
-        // Transfer USDC from user to this contract
-        usdc.transferFrom(msg.sender, address(this), _amount);
-
         if (_predictedOutcome) {
-            emit LongAdded(_id, msg.sender, _amount);
+            emit LongAdded(_id, msg.sender, msg.value);
         } else {
-            emit ShortAdded(_id, msg.sender, _amount);
+            emit ShortAdded(_id, msg.sender, msg.value);
         }
     }
 
@@ -244,7 +247,7 @@ contract OneZero is AutomationCompatibleInterface {
         address[] memory holders = oz.getHolders();
         for (uint256 i = 0; i < holders.length; i++) {
             uint256 amount = oz.balanceOf(holders[i]) * commissionPerToken / 10 ** oz.decimals();
-            usdc.transfer(holders[i], amount);
+            payable(holders[i]).transfer(amount);
         }
 
         emit CommissionPaid(_id);
@@ -259,15 +262,15 @@ contract OneZero is AutomationCompatibleInterface {
 
         if (_outcome) { // Long stakers won
             address[] memory winners = option.longStakers;
-            uint256 payoutPerUSDCOfWinningStake = winnings * 10 ** oz.decimals() / option.totalLongs;
+            uint256 payoutPerETHOfWinningStake = winnings * 10 ** oz.decimals() / option.totalLongs;
             for (uint256 i = 0; i < winners.length; i++) {
-                usdc.transfer(winners[i], payoutPerUSDCOfWinningStake * getUserLongPosition(_id, winners[i]) / 10 ** oz.decimals());
+                payable(winners[i]).transfer(payoutPerETHOfWinningStake * getUserLongPosition(_id, winners[i]) / 10 ** oz.decimals());
             }
         } else { // Short stakers won
             address[] memory winners = option.shortStakers;
-            uint256 payoutPerUSDCOfWinningStake = winnings * 10 ** oz.decimals() / option.totalShorts;
+            uint256 payoutPerETHOfWinningStake = winnings * 10 ** oz.decimals() / option.totalShorts;
             for (uint256 i = 0; i < winners.length; i++) {
-                usdc.transfer(winners[i], payoutPerUSDCOfWinningStake * getUserShortPosition(_id, winners[i]) / 10 ** oz.decimals());
+                payable(winners[i]).transfer(payoutPerETHOfWinningStake * getUserShortPosition(_id, winners[i]) / 10 ** oz.decimals());
             }
         }
 

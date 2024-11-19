@@ -10,15 +10,15 @@ pragma solidity ^0.8.27;
 contract Storage {
     // State variables
     // - Consider setting to public as required for automatically generated getter functions
-    uint256 BASIS_POINTS_DIVISOR = 10000;
-    address oneZeroContractAddress;
-    address owner;
-    mapping(uint256 => binaryOption) binaryOptions;
-    mapping(address => uint256[]) userParticipatedOptions;
-    uint256 binaryOptionCounter;
-    uint256[] activeBinaryOptions;
-    mapping(uint256 => uint256) activeBinaryOptionsToIndex;
-    uint256[] concludedBinaryOptions;
+    uint256 private BASIS_POINTS_DIVISOR = 10000;
+    address private oneZeroContractAddress;
+    address private owner;
+    mapping(uint256 => binaryOption) private binaryOptions;
+    mapping(address => uint256[]) private userParticipatedOptions;
+    uint256 private binaryOptionCounter;
+    uint256[] private activeBinaryOptions;
+    mapping(uint256 => uint256) private activeBinaryOptionsToIndex;
+    uint256[] private concludedBinaryOptions;
 
     // Enums
     enum Outcome {

@@ -11,7 +11,7 @@ contract OZ is ERC20, Ownable {
     address[] private holders;
     mapping(address => bool) private _isHolder;
     mapping(address => uint256) private _holderIndex;
-    uint256 private cap; // <ax supply of tokens
+    uint256 private cap; // max supply of tokens
     uint256 private exchangeRate; // Price in wei per token
 
 
@@ -33,31 +33,40 @@ contract OZ is ERC20, Ownable {
     }
 
     // Public and external functions
-    // Function to get the token holders
+    // Function to retrieve maximum supply of OZ tokens
+    function getCap() external view returns (uint256) {
+        return cap;
+    }
+
+    // Function to retrieve price of OZ token in wei
     function getExchangeRate() external view returns (uint256) {
         return exchangeRate;
     }
 
+    // Function to retrieve current holders of OZ tokens
     function getHolders() external view returns (address[] memory) {
         return holders;
     }
 
+    // Function to update the maximum supply of OZ tokens
     function updateCap(uint256 _cap) external onlyOwner() {
         require(_cap > 0, "Cap must be greater than 0");
         require(_cap > totalSupply(), "Cap must be greater than the current number of circulating tokens");
         cap = _cap;
     }
 
+    // Function to update the price of OZ token in wei
     function updateEchangeRate(uint256 _exchangeRate) external onlyOwner() {
         require(_exchangeRate > 0, "Price per token (in wei) must be greater than 0");
         exchangeRate = _exchangeRate;
     }
 
+    // Function to exchange ETH for OZ tokens
     function mint() external payable {
         require(msg.value > 0, "No ETH transferred, unable to mint token");
         uint256 tokensPurchased = msg.value * 10 ** decimals() / exchangeRate;
         _mint(msg.sender, tokensPurchased);
-    } 
+    }
 
     // Private and internal functions
     // Override _update function to implement cap for number of tokens as well as tracking of holders
