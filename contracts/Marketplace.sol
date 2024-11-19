@@ -9,7 +9,7 @@ contract Marketplace {
     }
 
     struct Option {
-        unit256 id;
+        uint256 id;
     }
 
     modifier isRole(Role role) {
@@ -36,16 +36,16 @@ contract Marketplace {
 
     // ---------- member methods (start) ---------- //
 
-    function joinAsMember() {
+    function joinAsMember() public {
         members[msg.sender] = Role.User;
     }
 
-    function deleteMember(address member) isRole(Role.Admin) {
+    function deleteMember(address member) public isRole(Role.Admin) {
         require(members[member] < Role.Admin, "cannot delete admin");
         delete members[member];
     }
 
-    function updateMemberRole(address member, Role newRole) isRole(Role.Admin) {
+    function updateMemberRole(address member, Role newRole) public isRole(Role.Admin) {
         members[member] = newRole;
     }
 
@@ -53,31 +53,31 @@ contract Marketplace {
 
     // ---------- option methods (start) ---------- //
 
-    function addOption() isRole(Role.Admin) {}
+    function addOption() public isRole(Role.Admin) {}
 
-    function expireOption() isRole(Role.Admin) {
+    function expireOption() public isRole(Role.Admin) {
         // close for staking
         // settle balances
     }
 
-    function deleteOption(uint256 id) isRole(Role.Admin) {
+    function deleteOption(uint256 id) public isRole(Role.Admin) {
         uint256 shortId = id << 1;
         delete options[shortId];
-        delete option_members[shortId];
+        // delete option_members[shortId]; // cannot delete mapping directly, commented out for now to avoid changing logic
         // delete member_options[];
 
         uint256 longId = shortId + 1;
         delete options[longId];
-        delete option_members[longId];
+        // delete option_members[longId]; // cannot delete mapping directly, commented out for now to avoid changing logic
         // delete member_options[];
     }
 
-    function stakeOption(uint256 id) isRole(Role.User) {}
+    function stakeOption(uint256 id) public isRole(Role.User) {}
 
-    function unstakeOption(uint256 id) isRole(Role.User) {}
+    function unstakeOption(uint256 id) public isRole(Role.User) {}
 
-    function viewMemberBalance() isRole(Role.User) {
-        memberBalance = member_options[msg.sender];
+    function viewMemberBalance() public view isRole(Role.User) {
+        mapping(uint256 => uint256) storage memberBalance = member_options[msg.sender];
         // for option in memberBalance, return
     }
 

@@ -6,9 +6,9 @@ pragma solidity ^0.8.27;
 import "./Storage.sol";
 import "./OZ.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/KeeperCompatibleInterface.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
-contract OneZero is KeeperCompatibleInterface {
+contract OneZero is AutomationCompatibleInterface {
     // State variables
     // - Consider setting to public as required for automatically generated getter functions
     ERC20 usdc;
