@@ -26,7 +26,6 @@ contract Commissions is ReentrancyGuard {
         commissionPeriodDuration = _commissionPeriodDuration;
     }
 
-    // Receive commission payments
     receive() external payable {
         _distributeCommission();
     }
