@@ -7,17 +7,6 @@ A binary options marketplace.
 - stake platform token on long and short options
 - automatic payout when option expires
 
-## Increase complexity ideas
-
-- add a platform token
-  - manage commission payouts
-  - governance
-- oracles
-  - time
-  - options
-    - underlying
-    - result
-
 ## Contracts
 
 - Commissions.sol
