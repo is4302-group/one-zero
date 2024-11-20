@@ -11,16 +11,17 @@ contract OZ is ERC20, Ownable {
     address[] private holders;
     mapping(address => bool) private _isHolder;
     mapping(address => uint256) private _holderIndex;
-    uint256 private cap; // max supply of tokens
+    uint256 private cap; // Max supply of tokens
     uint256 private exchangeRate; // Price in wei per token
 
 
     // Constructor
-    constructor(string memory name, string memory symbol, uint256 _cap, uint256 _exchangeRate) ERC20(name, symbol) Ownable(msg.sender) {
+    constructor(string memory name, string memory symbol, uint256 _cap, uint256 _exchangeRate, uint256 _ownerInitialAllocation) ERC20(name, symbol) Ownable(msg.sender) {
         require(_cap > 0, "Cap must be greater than 0");
         require(_exchangeRate > 0, "Price per token (in wei) must be greater than 0");
         cap = _cap;
         exchangeRate = _exchangeRate;
+        _mint(msg.sender, _ownerInitialAllocation);
     }
 
     // Fallback and receive functions
@@ -56,7 +57,7 @@ contract OZ is ERC20, Ownable {
     }
 
     // Function to update the price of OZ token in wei
-    function updateEchangeRate(uint256 _exchangeRate) external onlyOwner() {
+    function updateExchangeRate(uint256 _exchangeRate) external onlyOwner() {
         require(_exchangeRate > 0, "Price per token (in wei) must be greater than 0");
         exchangeRate = _exchangeRate;
     }
@@ -72,7 +73,7 @@ contract OZ is ERC20, Ownable {
     // Override _update function to implement cap for number of tokens as well as tracking of holders
     function _update(address from, address to, uint256 value) internal override {
         if (from == address(0)) { // Minting
-            require(totalSupply() + value <= cap, "cap exceeded"); // Check that minting these tokens does not exceed cap
+            require(totalSupply() + value <= cap, "Cap exceeded"); // Check that minting these tokens does not exceed cap
 
             // Add recipient to holders array if this address will become a new holder
             if (!_isHolder[to]) {
