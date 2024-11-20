@@ -5,26 +5,18 @@ import "./Storage.sol";
 import "./GovernanceToken.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
-contract OneZero is AutomationCompatibleInterface {
-    // State variables
-    // - Consider setting to public as required for automatically generated getter functions
+contract Marketplace is AutomationCompatibleInterface {
     GovernanceToken governanceToken;
     Storage storageContract;
     address private owner;
     uint256 private minimumPeriod; // Minimum period for a binary option in seconds
 
-    // Enums
-
-    // Structs
-
-    // Events
     event BinaryOptionCreated(uint256 id, string title, uint256 start, uint256 period, uint256 commissionRate);
     event LongAdded(uint256 id, address user, uint256 amount);
     event ShortAdded(uint256 id, address user, uint256 amount);
     event BinaryOptionConcluded(uint256 id);
     event CommissionPaid(uint256 id);
 
-    // Modifiers
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call this function");
         _;
@@ -54,12 +46,9 @@ contract OneZero is AutomationCompatibleInterface {
     }
 
     // Constructor
-    constructor(address payable _tokenAddress, address payable _storageAddress) {
-        governanceToken = GovernanceToken(_tokenAddress);
-
-        storageContract = Storage(_storageAddress); // Instantiate storage contract
-
-        // Set address for owner
+    constructor(address payable _governanceToken, address payable _storage) {
+        governanceToken = GovernanceToken(_governanceToken);
+        storageContract = Storage(_storage);
         owner = msg.sender;
     }
 
@@ -72,8 +61,6 @@ contract OneZero is AutomationCompatibleInterface {
         revert("Function does not exist");
     }
 
-    // Public and external functions
-    // Function to retrive owner of the contract
     function getOwner() public view returns (address) {
         return owner;
     }
@@ -292,7 +279,7 @@ contract OneZero is AutomationCompatibleInterface {
     }
 }
 
-contract Marketplace {
+contract Marketplace2 {
     enum Role {
         User,
         Admin,
