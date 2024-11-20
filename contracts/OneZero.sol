@@ -13,8 +13,8 @@ contract OneZero is AutomationCompatibleInterface {
     OZ oz;
     Storage storageContract;
     address private owner;
-    uint256 private minimumPeriod; // Minimum period for a binary option in seconds
-
+    uint256 private minimumDuration; // Minimum duration for a binary option in seconds
+    mapping(address => bool) private admin; // Mapping of admin addresses
 
     // Enums
 
@@ -23,10 +23,10 @@ contract OneZero is AutomationCompatibleInterface {
 
 
     // Events
-    event BinaryOptionCreated(uint256 id, string title, uint256 start, uint256 period, uint256 commissionRate);
+    event BinaryOptionCreated(uint256 id, string title, uint256 start, uint256 duration, uint256 commissionRate);
     event LongAdded(uint256 id, address user, uint256 amount);
     event ShortAdded(uint256 id, address user, uint256 amount);
-    event BinaryOptionConcluded(uint256 id);
+    event BinaryOptionConcluded(uint256 id, bool outcome);
     event CommissionPaid(uint256 id);
 
 
@@ -36,8 +36,23 @@ contract OneZero is AutomationCompatibleInterface {
         _;
     }
 
+    modifier onlyAdminOrOwner(address _address) {
+        require(msg.sender == owner || admin[_address], "Only owner and admins can call this function");
+        _;
+    }
+
     modifier validStake(uint256 _amount){
         require(_amount > 0, "Amount must be greater than 0");
+        _;
+    }
+
+    modifier validTitle(string memory _title){
+        require(bytes(_title).length > 0, "Title cannot be empty");
+        _;
+    }
+
+    modifier validDuration(uint256 _duration){
+        require(_duration >= minimumDuration, "Specified duration is shorter than the minimum duration for a binary option");
         _;
     }
 
@@ -49,25 +64,23 @@ contract OneZero is AutomationCompatibleInterface {
     modifier activeBinaryOption(uint256 _id) {
         Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
         require(block.timestamp >= option.start, "Binary option has not started yet");
-        require(block.timestamp < option.start + option.period, "Binary option has ended");
+        require(block.timestamp < option.start + option.duration, "Binary option has ended");
         _;
     }
 
     modifier expiredBinaryOption(uint256 _id) {
         Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
-        require(block.timestamp >= option.start + option.period, "Binary option has not ended yet");
+        require(block.timestamp >= option.start + option.duration, "Duration for binary option has not passed");
         _;
     }
 
 
     // Constructor
-    constructor(address payable _ozAddress, address payable _storageContractAddress) {
-        oz = OZ(_ozAddress);
-
+    constructor(address payable _ozAddress, address payable _storageContractAddress, uint256 _minimumDuration) {
+        oz = OZ(_ozAddress); // Instantiate OZ token
         storageContract = Storage(_storageContractAddress); // Instantiate storage contract
-
-        // Set address for owner
-        owner = msg.sender;
+        owner = msg.sender; // Set owner of the contract
+        minimumDuration = _minimumDuration; // Set minimum duration for a binary option
     }
 
 
@@ -82,14 +95,44 @@ contract OneZero is AutomationCompatibleInterface {
 
 
     // Public and external functions
-    // Function to retrive owner of the contract
+    // Function to retrieve address of the OZ token
+    function getOZAddress() public view returns (address) {
+        return address(oz);
+    }
+
+    // Function to retrieve address of the storage contract
+    function getStorageAddress() public view returns (address) {
+        return address(storageContract);
+    }
+
+    // Function to retrieve owner of the contract
     function getOwner() public view returns (address) {
         return owner;
     }
 
-    // Function to retrieve minimum period of a binary option
-    function getMinimumPeriod() public view returns (uint256) {
-        return minimumPeriod;
+    // Function to transfer ownership of the contract
+    function transferOwnership(address _newOwner) public onlyOwner() {
+        owner = _newOwner;
+    }
+
+    // Function to retrieve minimum duration of a binary option
+    function getMinimumDuration() public view returns (uint256) {
+        return minimumDuration;
+    }
+
+    // Function to set minimum duration of a binary option
+    function setMinimumDuration(uint256 _minimumDuration) public onlyOwner() {
+        minimumDuration = _minimumDuration;
+    }
+
+    // Function to check if an address is an admin
+    function isAdmin(address _address) public view returns (bool) {
+        return admin[_address];
+    }
+
+    // Function to update admin mapping
+    function updateAdmin(address _address, bool _isAdmin) public onlyOwner() {
+        admin[_address] = _isAdmin;
     }
 
     // Function to retrieve all details for a binary option
@@ -124,17 +167,17 @@ contract OneZero is AutomationCompatibleInterface {
     }
 
     // Function to create new binary option
-    function addBinaryOption(string memory _title, uint256 _start, uint256 _period, uint256 _commissionRate) public onlyOwner() {
+    function addBinaryOption(string memory _title, uint256 _start, uint256 _duration, uint256 _commissionRate) public onlyAdminOrOwner(msg.sender) validTitle(_title) validDuration(_duration) {
         // Perform verification checks
         require(_start > block.timestamp, "Backdating the start of a binary option is not allowed");
-        require(_start + _period > block.timestamp, "Binary option must end in the future");
-        require(_period > 0, "Period must be greater than 0");
+        require(_start + _duration > block.timestamp, "Binary option must end in the future");
+        require(_duration > 0, "Duration must be greater than 0");
 
         // Instantiate binary option
-        bool success = storageContract.createBinaryOption(_title, _start, _period, _commissionRate);
+        bool success = storageContract.createBinaryOption(_title, _start, _duration, _commissionRate);
 
         require(success, "Failed to create binary option");
-        emit BinaryOptionCreated(storageContract.readBinaryOptionCounter() - 1, _title, _start, _period, _commissionRate);
+        emit BinaryOptionCreated(storageContract.readBinaryOptionCounter() - 1, _title, _start, _duration, _commissionRate);
     }
 
     // Function to add position to binary option
@@ -150,29 +193,6 @@ contract OneZero is AutomationCompatibleInterface {
         }
     }
 
-    // Function to conclude binary option
-    function concludeBinaryOption(uint256 _id) public onlyOwner() expiredBinaryOption(_id) returns (bool) {
-        Storage.Outcome status = storageContract.readBinaryOption(_id).outcome;
-        require(status == Storage.Outcome.notConcluded, "Binary option has already been concluded"); // Prevents a binary option from being concluded more than once
-
-        bool outcome = retrieveOutcome(_id); // Retrieve outcome from oracle
-
-        // Conclude binary option
-        bool conclusionSuccess = storageContract.endBinaryOption(_id, outcome);
-        require(conclusionSuccess, "Failed to conclude binary option");
-
-        // Pay out winnings
-        bool winningPaymentSuccess = payOutWinnings(_id, outcome);
-        require(winningPaymentSuccess, "Failed to pay out winnings");
-
-        // Pay out commission
-        bool commissionPaymentSuccess = payOutCommission(_id);
-        require(commissionPaymentSuccess, "Failed to pay out commission");
-
-        emit BinaryOptionConcluded(_id);
-        return true;
-    }
-
     // Function for chainlink keeper to call to check if any binary options have expired
     // - Chainlink keepers will call this method periodically
     // - Identify binary options that have expired by iterating through activeBinaryOptions array
@@ -186,21 +206,21 @@ contract OneZero is AutomationCompatibleInterface {
         // Check for expired options and store their ids in the array
         for (uint256 i = 0; i < activeBinaryOptions.length; i++) {
             Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(activeBinaryOptions[i]);
-            if (block.timestamp >= option.start + option.period) {
+            if (block.timestamp >= option.start + option.duration) {
                 expiredBinaryOptions[expiredCount] = activeBinaryOptions[i];  // Store expired option id
                 expiredCount++;  // Increment the count of expired options
             }
-        }
-
-        // If there are no expired options, return false
-        if (expiredCount == 0) {
-            return (false, bytes(""));  // No upkeep needed
         }
 
         // Return the result with the expired options array encoded
         uint256[] memory trimmedExpiredBinaryOptions = new uint256[](expiredCount);
         for (uint256 i = 0; i < expiredCount; i++) {
             trimmedExpiredBinaryOptions[i] = expiredBinaryOptions[i];
+        }
+
+        // If there are no expired options, return false
+        if (expiredCount == 0) {
+            return (false, abi.encode(trimmedExpiredBinaryOptions));  // No upkeep needed
         }
 
         // Encode the result and return it
@@ -224,6 +244,38 @@ contract OneZero is AutomationCompatibleInterface {
 
 
     // Private and internal functions
+
+    // Function to conclude binary option
+    // - Safeguards taken to prevent abuse:
+    //     - Outcome is retrieved from an oracle
+    //     - Time checks performed to ensure that the binary option has indeed expired
+    //     - Checks performed to ensure that a binary option can only be concluded once
+    function concludeBinaryOption(uint256 _id) internal validBinaryOption(_id) expiredBinaryOption(_id) returns (bool) {
+        Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
+        require(option.outcome == Storage.Outcome.notConcluded, "Binary option has already been concluded"); // Prevents a binary option from being concluded more than once
+
+        bool outcome = retrieveOutcome(_id); // Retrieve outcome from oracle
+
+        // Conclude binary option
+        bool conclusionSuccess = storageContract.endBinaryOption(_id, outcome);
+        require(conclusionSuccess, "Failed to conclude binary option");
+
+        if ((outcome && option.totalLongs != 0) || (!outcome && option.totalShorts != 0)) { // Only pay out winnings if there are winners
+            // Pay out winnings
+            bool winningPaymentSuccess = payOutWinnings(_id, outcome);
+            require(winningPaymentSuccess, "Failed to pay out winnings");
+        }
+
+        // Pay out commission
+        if (oz.totalSupply() > 0) { // Only pay out commission if there are OZ token holders
+            bool commissionPaymentSuccess = payOutCommission(_id);
+            require(commissionPaymentSuccess, "Failed to pay out commission");
+        }
+
+        emit BinaryOptionConcluded(_id, outcome);
+        return true;
+    }
+
     // Dummy function for retrieval of Outcome from an oracle
     function retrieveOutcome(uint256 _id) internal view returns (bool) {
         // Retrieve binary option
@@ -231,10 +283,17 @@ contract OneZero is AutomationCompatibleInterface {
 
         // Derive identifier for option
         // - Identifier will be used to retrieve outcome from oracle
-        string memory identifier = "sample identifier"; // dummy code
+        string memory identifier = option.title; // Dummy code
 
-        // Retrieve outcome from oracle
-        bool outcome = true; // Dummy code here but in reality outcome is retrieved from oracle
+        bool outcome;
+
+        // Retrieve outcome from oracle using identifier
+        // - Dummy code here will always return true here but in reality outcome is retrieved from oracle
+        if (bytes(identifier).length > 0) {
+            outcome = true;
+        } else {
+            outcome = false;
+        }
 
         return outcome;
     }

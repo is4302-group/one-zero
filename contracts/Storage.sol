@@ -32,7 +32,7 @@ contract Storage {
         uint256 id;
         string title;
         uint256 start;
-        uint256 period; // Duration of binary option in seconds
+        uint256 duration; // Duration of binary option in seconds
         uint256 commissionRate; // Percentage of bet in basis points
         uint256 commissionCollected; // Total commission collected in wei
         Outcome outcome;
@@ -48,7 +48,7 @@ contract Storage {
         uint256 id;
         string title;
         uint256 start;
-        uint256 period; // Duration of binary option in seconds
+        uint256 duration; // Duration of binary option in seconds
         uint256 commissionRate; // Percentage of bet in basis points
         uint256 commissionCollected; // Total commission collected in USDC (i.e., 1e6)
         Outcome outcome;
@@ -92,6 +92,15 @@ contract Storage {
     }
 
     // Public and external functions
+    // Function to retrieve owner of contract
+    function getOwner() public view returns (address) {
+        return owner;
+    }
+
+    // Function to retrieve OneZero contract address
+    function getOneZeroAddress() public view returns (address) {
+        return oneZeroContractAddress;
+    }
 
     // Function to add OneZero contract address
     // - OneZero contract needs the address of this contract to call functions, therefore this contract is deployed first
@@ -101,7 +110,10 @@ contract Storage {
     }
 
     // Function to retrieve all details for a binary option
-    // - This can be broken down into multiple functions to retrieve specific details if required
+    // - We decided to return the entire sanitised struct in a single getter function to reduce the number of calls required
+    // - Currently, OneZero only requires individual components at a specific time
+    // - However, the front end will require all the information at once to display the binary option and its details
+    // - Therefore it is more gas efficient to make a single call to retrieve all the information
     function readBinaryOption(uint256 _id) public onlyOneZeroOrOwner() view returns (sanitisedBinaryOption memory) {
         binaryOption storage option = binaryOptions[_id];
 
@@ -109,7 +121,7 @@ contract Storage {
             id: option.id,
             title: option.title,
             start: option.start,
-            period: option.period,
+            duration: option.duration,
             commissionRate: option.commissionRate,
             commissionCollected: option.commissionCollected,
             outcome: option.outcome,
@@ -157,12 +169,12 @@ contract Storage {
     // Internal and private functions
 
     // Function to add a binary option
-    function createBinaryOption(string memory _title, uint256 _start, uint256 _period, uint256 _commissionRate) public onlyOneZeroOrOwner() returns (bool) {
+    function createBinaryOption(string memory _title, uint256 _start, uint256 _duration, uint256 _commissionRate) public onlyOneZero() returns (bool) {
         // Instantiate binary option
         binaryOptions[binaryOptionCounter].id = binaryOptionCounter;
         binaryOptions[binaryOptionCounter].title = _title;
         binaryOptions[binaryOptionCounter].start = _start;
-        binaryOptions[binaryOptionCounter].period = _period;
+        binaryOptions[binaryOptionCounter].duration = _duration;
         binaryOptions[binaryOptionCounter].commissionRate = _commissionRate;
         binaryOptions[binaryOptionCounter].outcome = Outcome.notConcluded;
 
@@ -183,7 +195,7 @@ contract Storage {
         bool previousLongPosition = option.longs[_user] != 0;
         bool previousShortPosition = option.shorts[_user] != 0;
 
-        if (!previousLongPosition && !previousShortPosition) { // user's first time particiting in this particular binary option
+        if (!previousLongPosition && !previousShortPosition) { // User's first time particiting in this particular binary option
             userParticipatedOptions[_user].push(_id); // Add binary option to user's participated options
         }
 
@@ -207,7 +219,7 @@ contract Storage {
     // Function contains logic that could potentially cost alot of gas
     // - Specifically, removing the id of the concluded binary option from the activeBinaryOptions and adding it to the concludedBinaryOptions array could cost alot of gas if the arrays get too large
     // - Potential workaround: none on-chain but will be resolved if data storage is shifted off-chain
-    function endBinaryOption(uint256 _id, bool _outcome) public onlyOneZeroOrOwner() returns (bool) {
+    function endBinaryOption(uint256 _id, bool _outcome) public onlyOneZero() returns (bool) {
         binaryOption storage option = binaryOptions[_id]; // Retrieve binary option
         if (_outcome) { // Outcome is true
             option.outcome = Outcome.long; // Set outcome to long
