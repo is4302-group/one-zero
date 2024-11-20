@@ -38,7 +38,7 @@ contract Commissions is ReentrancyGuard {
         return periodIndex;
     }
 
-    function _distributeCommission() internal {
+    function _distributeCommission() private {
         require(msg.value > 0, "Must send ETH");
 
         uint256 totalTokenSupply = governanceToken.totalSupply();
@@ -52,7 +52,7 @@ contract Commissions is ReentrancyGuard {
         emit CommissionDeposited(msg.value);
     }
 
-    function calculatePeriodCommission(address _user, uint256 _periodIndex) public view returns (uint256) {
+    function calculatePeriodCommission(address _user, uint256 _periodIndex) private view returns (uint256) {
         uint256 userTokenBalance = governanceToken.balanceOf(_user);
         if (userTokenBalance == 0) {
             return 0;
