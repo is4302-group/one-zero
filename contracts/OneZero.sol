@@ -2,11 +2,11 @@
 pragma solidity ^0.8.27;
 
 import "./Storage.sol";
-import "./GovernanceToken.sol";
+import "./CommissionToken.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
 contract OneZero is AutomationCompatibleInterface {
-    GovernanceToken oz;
+    CommissionToken oz;
     Storage storageContract;
     address private owner;
     uint256 private minimumDuration; // Minimum duration for a binary option in seconds
@@ -64,7 +64,7 @@ contract OneZero is AutomationCompatibleInterface {
     }
 
     constructor(address payable _ozAddress, address payable _storageContractAddress, uint256 _minimumDuration) {
-        oz = GovernanceToken(_ozAddress); // Instantiate OZ token
+        oz = CommissionToken(_ozAddress); // Instantiate OZ token
         storageContract = Storage(_storageContractAddress); // Instantiate storage contract
         owner = msg.sender; // Set owner of the contract
         minimumDuration = _minimumDuration; // Set minimum duration for a binary option
