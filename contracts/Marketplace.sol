@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-// Import statements
-// import "hardhat/console.sol"; // Uncomment this line to use console.log
 import "./Storage.sol";
 import "./GovernanceToken.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
