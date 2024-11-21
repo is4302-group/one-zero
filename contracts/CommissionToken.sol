@@ -5,8 +5,9 @@ import "./TimeCheck.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract CommissionToken is ReentrancyGuard, ERC20Capped {
+contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
     using Math for uint256;
 
     TimeCheck immutable timeCheck;
@@ -24,11 +25,9 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         string memory _symbol,
         uint256 _cap,
         uint256 _commissionPeriodDuration,
-        address _timeCheck,
-        address _market
-    ) ERC20(_name, _symbol) ERC20Capped(_cap) {
+        address _timeCheck
+    ) ERC20(_name, _symbol) ERC20Capped(_cap) Ownable(msg.sender) {
         commissionPeriodDuration = _commissionPeriodDuration;
-        market = _market;
         timeCheck = TimeCheck(_timeCheck);
         startTime = timeCheck.viewTimeStamp();
         _mint(msg.sender, _cap);
@@ -99,5 +98,9 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         (, userCommission) = userCommission.tryDiv(1e18);
 
         return userCommission;
+    }
+
+    function setMarket(address _market) public onlyOwner {
+        market = _market;
     }
 }

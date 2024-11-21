@@ -21,16 +21,11 @@ describe("CommissionToken", function () {
 
         const commissionToken = await hre.ethers.deployContract(
             "CommissionToken",
-            [
-                NAME,
-                SYMBOL,
-                CAP,
-                COMMISSION_PERIOD_DURATION,
-                timeCheckAddress,
-                marketAccount.address,
-            ],
+            [NAME, SYMBOL, CAP, COMMISSION_PERIOD_DURATION, timeCheckAddress],
             owner,
         );
+
+        await commissionToken.connect(owner).setMarket(marketAccount.address);
 
         await commissionToken
             .connect(owner)
