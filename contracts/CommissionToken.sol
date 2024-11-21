@@ -27,11 +27,11 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         address _timeCheck,
         address _market
     ) ERC20(_name, _symbol) ERC20Capped(_cap) {
-        _mint(msg.sender, _cap);
-        startTime = timeCheck.viewTimeStamp();
         commissionPeriodDuration = _commissionPeriodDuration;
-        timeCheck = TimeCheck(_timeCheck);
         market = _market;
+        timeCheck = TimeCheck(_timeCheck);
+        startTime = timeCheck.viewTimeStamp();
+        _mint(msg.sender, _cap);
     }
 
     function distributeCommission() public payable {
