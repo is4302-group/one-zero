@@ -34,13 +34,6 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         market = _market;
     }
 
-    function getCurrentPeriodIndex() public view returns (uint256) {
-        uint256 currTime = timeCheck.viewTimeStamp();
-        (, uint256 timeDelta) = currTime.trySub(startTime);
-        (, uint256 periodIndex) = timeDelta.tryDiv(commissionPeriodDuration);
-        return periodIndex;
-    }
-
     function distributeCommission() public payable {
         require(msg.sender == market, "Only market contract can deposit commissions");
 
@@ -50,25 +43,6 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         periodTotalCommissions[currentPeriodIndex] = periodCommissions;
 
         emit CommissionDeposited(msg.value);
-    }
-
-    function calculatePeriodCommission(uint256 _userTokenBalance, uint256 _periodIndex)
-        private
-        view
-        returns (uint256)
-    {
-        uint256 totalPeriodCommission = periodTotalCommissions[_periodIndex];
-        if (totalPeriodCommission == 0) {
-            return 0;
-        }
-
-        (, uint256 userShare) = _userTokenBalance.tryMul(1e18);
-        (, userShare) = userShare.tryDiv(totalSupply());
-
-        (, uint256 userCommission) = totalPeriodCommission.tryMul(userShare);
-        (, userCommission) = userCommission.tryDiv(1e18);
-
-        return userCommission;
     }
 
     function claimCommission() public nonReentrant {
@@ -99,5 +73,31 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
     function _update(address from, address to, uint256 value) internal override {
         userLastClaimedPeriod[to] = getCurrentPeriodIndex();
         super._update(from, to, value);
+    }
+
+    function getCurrentPeriodIndex() public view returns (uint256) {
+        uint256 currTime = timeCheck.viewTimeStamp();
+        (, uint256 timeDelta) = currTime.trySub(startTime);
+        (, uint256 periodIndex) = timeDelta.tryDiv(commissionPeriodDuration);
+        return periodIndex;
+    }
+
+    function calculatePeriodCommission(uint256 _userTokenBalance, uint256 _periodIndex)
+        private
+        view
+        returns (uint256)
+    {
+        uint256 totalPeriodCommission = periodTotalCommissions[_periodIndex];
+        if (totalPeriodCommission == 0) {
+            return 0;
+        }
+
+        (, uint256 userShare) = _userTokenBalance.tryMul(1e18);
+        (, userShare) = userShare.tryDiv(totalSupply());
+
+        (, uint256 userCommission) = totalPeriodCommission.tryMul(userShare);
+        (, userCommission) = userCommission.tryDiv(1e18);
+
+        return userCommission;
     }
 }
