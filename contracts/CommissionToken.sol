@@ -56,7 +56,7 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         require(lastClaimedPeriod <= latestCompletedPeriod, "Invalid last claimed period");
 
         uint256 totalUnclaimedCommission = 0;
-        for (uint256 i = lastClaimedPeriod; i < latestCompletedPeriod; i++) {
+        for (uint256 i = lastClaimedPeriod; i <= latestCompletedPeriod; i++) {
             uint256 periodCommission = calculatePeriodCommission(userTokenBalance, i);
             (, totalUnclaimedCommission) = totalUnclaimedCommission.tryAdd(periodCommission);
         }
