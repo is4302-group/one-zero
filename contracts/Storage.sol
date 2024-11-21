@@ -1,15 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-// Import statements
-// import "hardhat/console.sol"; // Uncomment this line to use console.log
-
-// Storage contract stores the data for each of the binary options
-// Storage contract also contains logic required for CRUD operations on binary options data
-
 contract Storage {
-    // State variables
-    // - Consider setting to public as required for automatically generated getter functions
     uint256 private BASIS_POINTS_DIVISOR = 10000;
     address private oneZeroContractAddress;
     address private owner;
@@ -20,14 +12,12 @@ contract Storage {
     mapping(uint256 => uint256) private activeBinaryOptionsToIndex;
     uint256[] private concludedBinaryOptions;
 
-    // Enums
     enum Outcome {
         notConcluded,
         long,
         short
     }
 
-    // Structs
     struct binaryOption {
         uint256 id;
         string title;
@@ -58,9 +48,6 @@ contract Storage {
         address[] shortStakers; // Array of addresses which have staked in a short position
     }
 
-    // Events
-
-    // Modifiers
     modifier onlyOneZero() {
         require(msg.sender == oneZeroContractAddress, "Only OneZero contract can call this function");
         _;
@@ -78,13 +65,10 @@ contract Storage {
         _;
     }
 
-    // Constructor
-    // - Store address of owner to state for access control
     constructor() {
         owner = msg.sender;
     }
 
-    // Fallback and receive functions
     receive() external payable {
         revert("Contract does not accept Ether");
     }
@@ -93,25 +77,20 @@ contract Storage {
         revert("Function does not exist");
     }
 
-    // Public and external functions
-    // Function to retrieve owner of contract
     function getOwner() public view returns (address) {
         return owner;
     }
 
-    // Function to retrieve OneZero contract address
     function getOneZeroAddress() public view returns (address) {
         return oneZeroContractAddress;
     }
 
-    // Function to add OneZero contract address
     // - OneZero contract needs the address of this contract to call functions, therefore this contract is deployed first
     // - Function therefore required to specify the address of the OneZero contract for access control
     function setOneZeroAddress(address _oneZeroContractAddress) public onlyOwner {
         oneZeroContractAddress = _oneZeroContractAddress;
     }
 
-    // Function to retrieve all details for a binary option
     // - We decided to return the entire sanitised struct in a single getter function to reduce the number of calls required
     // - Currently, OneZero only requires individual components at a specific time
     // - However, the front end will require all the information at once to display the binary option and its details
@@ -134,43 +113,34 @@ contract Storage {
         });
     }
 
-    // Function to retrieve all binary options that a user has participated in
     function readUserParticipatedOptions(address _user) public view onlyOneZeroOrOwner returns (uint256[] memory) {
         return userParticipatedOptions[_user];
     }
 
-    // Function to retrieve all active binary options
     // - Sorting may exceed gas limit if array is too large, hence sorting will be done off-chain by backend/frontend
     function readActiveBinaryOptions() public view onlyOneZeroOrOwner returns (uint256[] memory) {
         return activeBinaryOptions; // not sorted
     }
 
-    // Function to retrieve all concluded binary options
     // - Sorting may exceed gas limit if array is too large, hence sorting will be done off-chain by backend/frontend
     function readConcludedBinaryOptions() public view onlyOneZeroOrOwner returns (uint256[] memory) {
         return concludedBinaryOptions; // not sorted
     }
 
-    // Function to retrieve user's long position in a binary option
     function readUserLongPosition(uint256 _id, address _user) public view onlyOneZeroOrOwner returns (uint256) {
         binaryOption storage option = binaryOptions[_id];
         return (option.longs[_user]);
     }
 
-    // Function to retrieve user's long position in a binary option
     function readUserShortPosition(uint256 _id, address _user) public view onlyOneZeroOrOwner returns (uint256) {
         binaryOption storage option = binaryOptions[_id];
         return (option.shorts[_user]);
     }
 
-    // Function to retrieve current value of binaryOptionCounter
     function readBinaryOptionCounter() public view onlyOneZeroOrOwner returns (uint256) {
         return binaryOptionCounter;
     }
 
-    // Internal and private functions
-
-    // Function to add a binary option
     function createBinaryOption(string memory _title, uint256 _start, uint256 _duration, uint256 _commissionRate)
         public
         onlyOneZero
