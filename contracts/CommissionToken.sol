@@ -26,7 +26,7 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped {
         uint256 _commissionPeriodDuration,
         address _timeCheck,
         address _market
-    ) ERC20Capped(_cap) ERC20(_name, _symbol) {
+    ) ERC20(_name, _symbol) ERC20Capped(_cap) {
         _mint(msg.sender, _cap);
         startTime = timeCheck.viewTimeStamp();
         commissionPeriodDuration = _commissionPeriodDuration;
