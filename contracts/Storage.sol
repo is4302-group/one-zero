@@ -3,7 +3,7 @@ pragma solidity ^0.8.27;
 
 contract Storage {
     uint256 private BASIS_POINTS_DIVISOR = 10000;
-    address private oneZeroContractAddress;
+    address private market;
     address private owner;
     mapping(uint256 => binaryOption) private binaryOptions;
     mapping(address => uint256[]) private userParticipatedOptions;
@@ -48,8 +48,8 @@ contract Storage {
         address[] shortStakers; // Array of addresses which have staked in a short position
     }
 
-    modifier onlyOneZero() {
-        require(msg.sender == oneZeroContractAddress, "Only OneZero contract can call this function");
+    modifier onlyMarket() {
+        require(msg.sender == market, "Only market contract can call this function");
         _;
     }
 
@@ -58,10 +58,8 @@ contract Storage {
         _;
     }
 
-    modifier onlyOneZeroOrOwner() {
-        require(
-            msg.sender == oneZeroContractAddress || msg.sender == owner, "Only OneZero and owner can call this function"
-        );
+    modifier onlyMarketOrOwner() {
+        require(msg.sender == market || msg.sender == owner, "Only market and owner can call this function");
         _;
     }
 
@@ -81,21 +79,21 @@ contract Storage {
         return owner;
     }
 
-    function getOneZeroAddress() public view returns (address) {
-        return oneZeroContractAddress;
+    function getMarket() public view returns (address) {
+        return market;
     }
 
-    // - OneZero contract needs the address of this contract to call functions, therefore this contract is deployed first
-    // - Function therefore required to specify the address of the OneZero contract for access control
-    function setOneZeroAddress(address _oneZeroContractAddress) public onlyOwner {
-        oneZeroContractAddress = _oneZeroContractAddress;
+    // - market contract needs the address of this contract to call functions, therefore this contract is deployed first
+    // - Function therefore required to specify the address of the market contract for access control
+    function setMarket(address _market) public onlyOwner {
+        market = _market;
     }
 
     // - We decided to return the entire sanitised struct in a single getter function to reduce the number of calls required
-    // - Currently, OneZero only requires individual components at a specific time
+    // - Currently, market only requires individual components at a specific time
     // - However, the front end will require all the information at once to display the binary option and its details
     // - Therefore it is more gas efficient to make a single call to retrieve all the information
-    function readBinaryOption(uint256 _id) public view onlyOneZeroOrOwner returns (sanitisedBinaryOption memory) {
+    function readBinaryOption(uint256 _id) public view onlyMarketOrOwner returns (sanitisedBinaryOption memory) {
         binaryOption storage option = binaryOptions[_id];
 
         return sanitisedBinaryOption({
@@ -113,37 +111,37 @@ contract Storage {
         });
     }
 
-    function readUserParticipatedOptions(address _user) public view onlyOneZeroOrOwner returns (uint256[] memory) {
+    function readUserParticipatedOptions(address _user) public view onlyMarketOrOwner returns (uint256[] memory) {
         return userParticipatedOptions[_user];
     }
 
     // - Sorting may exceed gas limit if array is too large, hence sorting will be done off-chain by backend/frontend
-    function readActiveBinaryOptions() public view onlyOneZeroOrOwner returns (uint256[] memory) {
+    function readActiveBinaryOptions() public view onlyMarketOrOwner returns (uint256[] memory) {
         return activeBinaryOptions; // not sorted
     }
 
     // - Sorting may exceed gas limit if array is too large, hence sorting will be done off-chain by backend/frontend
-    function readConcludedBinaryOptions() public view onlyOneZeroOrOwner returns (uint256[] memory) {
+    function readConcludedBinaryOptions() public view onlyMarketOrOwner returns (uint256[] memory) {
         return concludedBinaryOptions; // not sorted
     }
 
-    function readUserLongPosition(uint256 _id, address _user) public view onlyOneZeroOrOwner returns (uint256) {
+    function readUserLongPosition(uint256 _id, address _user) public view onlyMarketOrOwner returns (uint256) {
         binaryOption storage option = binaryOptions[_id];
         return (option.longs[_user]);
     }
 
-    function readUserShortPosition(uint256 _id, address _user) public view onlyOneZeroOrOwner returns (uint256) {
+    function readUserShortPosition(uint256 _id, address _user) public view onlyMarketOrOwner returns (uint256) {
         binaryOption storage option = binaryOptions[_id];
         return (option.shorts[_user]);
     }
 
-    function readBinaryOptionCounter() public view onlyOneZeroOrOwner returns (uint256) {
+    function readBinaryOptionCounter() public view onlyMarketOrOwner returns (uint256) {
         return binaryOptionCounter;
     }
 
     function createBinaryOption(string memory _title, uint256 _start, uint256 _duration, uint256 _commissionRate)
         public
-        onlyOneZero
+        onlyMarket
         returns (bool)
     {
         // Instantiate binary option
@@ -165,7 +163,7 @@ contract Storage {
     // - Potential workaround: limit the history of binary options that a user has participated in
     function createPosition(uint256 _id, address _user, uint256 _amount, bool _predictedOutcome)
         public
-        onlyOneZero
+        onlyMarket
         returns (bool)
     {
         binaryOption storage option = binaryOptions[_id]; // Retrieve binary option
@@ -204,7 +202,7 @@ contract Storage {
     // Function contains logic that could potentially cost alot of gas
     // - Specifically, removing the id of the concluded binary option from the activeBinaryOptions and adding it to the concludedBinaryOptions array could cost alot of gas if the arrays get too large
     // - Potential workaround: none on-chain but will be resolved if data storage is shifted off-chain
-    function endBinaryOption(uint256 _id, bool _outcome) public onlyOneZero returns (bool) {
+    function endBinaryOption(uint256 _id, bool _outcome) public onlyMarket returns (bool) {
         binaryOption storage option = binaryOptions[_id]; // Retrieve binary option
         if (_outcome) {
             // Outcome is true
