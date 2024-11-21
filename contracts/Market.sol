@@ -258,17 +258,12 @@ contract Market is AutomationCompatibleInterface {
 
     // Dummy function for retrieval of outcome from an oracle
     function retrieveOutcome(uint256 _id) internal view returns (bool) {
-        // Retrieve binary option
-        Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
+        // Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
+        // string memory id = getOptionIDForOracle(option);
+        // outcome = Oracle.getOutcome(id);
+        // return outcome;
 
-        // Derive identifier for option
-        // - Identifier will be used to retrieve outcome from oracle
-        string memory identifier = option.title; // Dummy code
-
-        // Retrieve outcome from oracle using identifier
-        // - Dummy code here returns random outcome
-        // - in reality outcome is retrieved from oracle
-        return block.prevrandao % 2 == 0;
+        return true; // return constant for testing
     }
 
     function payOutCommission(uint256 _id) internal returns (bool) {
