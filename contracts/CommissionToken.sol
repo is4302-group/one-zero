@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-import "./TimeCheck.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
@@ -10,7 +9,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
     using Math for uint256;
 
-    TimeCheck immutable timeCheck;
     mapping(uint256 => uint256) periodTotalCommissions;
     mapping(address => uint256) userLastClaimedPeriod;
     uint256 immutable startTime;
@@ -20,16 +18,13 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
     event CommissionDeposited(uint256 amount);
     event CommissionClaimed(address indexed user, uint256 amount);
 
-    constructor(
-        string memory _name,
-        string memory _symbol,
-        uint256 _cap,
-        uint256 _commissionPeriodDuration,
-        address _timeCheck
-    ) ERC20(_name, _symbol) ERC20Capped(_cap) Ownable(msg.sender) {
+    constructor(string memory _name, string memory _symbol, uint256 _cap, uint256 _commissionPeriodDuration)
+        ERC20(_name, _symbol)
+        ERC20Capped(_cap)
+        Ownable(msg.sender)
+    {
         commissionPeriodDuration = _commissionPeriodDuration;
-        timeCheck = TimeCheck(_timeCheck);
-        startTime = timeCheck.viewTimeStamp();
+        startTime = block.timestamp;
         _mint(msg.sender, _cap);
     }
 
@@ -75,7 +70,7 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
     }
 
     function getCurrentPeriodIndex() public view returns (uint256) {
-        uint256 currTime = timeCheck.viewTimeStamp();
+        uint256 currTime = block.timestamp;
         (, uint256 timeDelta) = currTime.trySub(startTime);
         (, uint256 periodIndex) = timeDelta.tryDiv(commissionPeriodDuration);
         return periodIndex;

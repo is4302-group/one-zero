@@ -16,12 +16,9 @@ describe("CommissionToken", function () {
         const [marketAccount, owner, user1, user2] =
             await hre.ethers.getSigners();
 
-        const timeCheck = await hre.ethers.deployContract("TimeCheck");
-        const timeCheckAddress = await timeCheck.getAddress();
-
         const commissionToken = await hre.ethers.deployContract(
             "CommissionToken",
-            [NAME, SYMBOL, CAP, COMMISSION_PERIOD_DURATION, timeCheckAddress],
+            [NAME, SYMBOL, CAP, COMMISSION_PERIOD_DURATION],
             owner,
         );
 

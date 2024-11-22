@@ -417,4 +417,3 @@ describe("Storage Contract", function () {
         expect(binaryOption.outcome).to.equal(BigInt(1));
     });
 });
-
