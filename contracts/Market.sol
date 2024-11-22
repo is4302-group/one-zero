@@ -174,51 +174,6 @@ contract Market is AutomationCompatibleInterface {
         }
     }
 
-    // - Identify binary options that have expired by iterating through activeBinaryOptions array
-    // - Return True and the id(s) of the expired binary option(s) if any
-    // - Else return False and empty performData
-    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory performData) {
-        uint256[] memory activeBinaryOptions = storageContract.readActiveBinaryOptions(); // Retrieve active binary options
-        uint256[] memory expiredBinaryOptions = new uint256[](activeBinaryOptions.length); // Allocate memory array for the expired options
-        uint256 expiredCount = 0;
-
-        // Check for expired options and store their ids in the array
-        for (uint256 i = 0; i < activeBinaryOptions.length; i++) {
-            Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(activeBinaryOptions[i]);
-            if (block.timestamp >= option.start + option.duration) {
-                expiredBinaryOptions[expiredCount] = activeBinaryOptions[i]; // Store expired option id
-                expiredCount++; // Increment the count of expired options
-            }
-        }
-
-        // Return the result with the expired options array encoded
-        uint256[] memory trimmedExpiredBinaryOptions = new uint256[](expiredCount);
-        for (uint256 i = 0; i < expiredCount; i++) {
-            trimmedExpiredBinaryOptions[i] = expiredBinaryOptions[i];
-        }
-
-        // If there are no expired options, return false
-        if (expiredCount == 0) {
-            return (false, abi.encode(trimmedExpiredBinaryOptions)); // No upkeep needed
-        }
-
-        // Encode the result and return it
-        return (true, abi.encode(trimmedExpiredBinaryOptions));
-    }
-
-    // - Outcome for each binary option will only be retrieved here to prevent abuse
-    // - Verification checks are also performed here again to prevent abuse
-    // - Code contains computationally expensive logic if there are numerous expired binary options concluded at one go
-    function performUpkeep(bytes calldata performData) external override {
-        // Decode ids of expired binary options
-        (uint256[] memory expiredBinaryOptions) = abi.decode(performData, (uint256[]));
-
-        for (uint256 i = 0; i < expiredBinaryOptions.length; i++) {
-            bool success = concludeBinaryOption(expiredBinaryOptions[i]);
-            require(success, "Failed to conclude binary option");
-        }
-    }
-
     // Safeguards taken to prevent abuse:
     // - Outcome is retrieved from an oracle
     // - Time checks performed to ensure that the binary option has indeed expired
@@ -299,5 +254,50 @@ contract Market is AutomationCompatibleInterface {
         }
 
         return true;
+    }
+
+    // - Identify binary options that have expired by iterating through activeBinaryOptions array
+    // - Return True and the id(s) of the expired binary option(s) if any
+    // - Else return False and empty performData
+    function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory performData) {
+        uint256[] memory activeBinaryOptions = storageContract.readActiveBinaryOptions(); // Retrieve active binary options
+        uint256[] memory expiredBinaryOptions = new uint256[](activeBinaryOptions.length); // Allocate memory array for the expired options
+        uint256 expiredCount = 0;
+
+        // Check for expired options and store their ids in the array
+        for (uint256 i = 0; i < activeBinaryOptions.length; i++) {
+            Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(activeBinaryOptions[i]);
+            if (block.timestamp >= option.start + option.duration) {
+                expiredBinaryOptions[expiredCount] = activeBinaryOptions[i]; // Store expired option id
+                expiredCount++; // Increment the count of expired options
+            }
+        }
+
+        // Return the result with the expired options array encoded
+        uint256[] memory trimmedExpiredBinaryOptions = new uint256[](expiredCount);
+        for (uint256 i = 0; i < expiredCount; i++) {
+            trimmedExpiredBinaryOptions[i] = expiredBinaryOptions[i];
+        }
+
+        // If there are no expired options, return false
+        if (expiredCount == 0) {
+            return (false, abi.encode(trimmedExpiredBinaryOptions)); // No upkeep needed
+        }
+
+        // Encode the result and return it
+        return (true, abi.encode(trimmedExpiredBinaryOptions));
+    }
+
+    // - Outcome for each binary option will only be retrieved here to prevent abuse
+    // - Verification checks are also performed here again to prevent abuse
+    // - Code contains computationally expensive logic if there are numerous expired binary options concluded at one go
+    function performUpkeep(bytes calldata performData) external override {
+        // Decode ids of expired binary options
+        (uint256[] memory expiredBinaryOptions) = abi.decode(performData, (uint256[]));
+
+        for (uint256 i = 0; i < expiredBinaryOptions.length; i++) {
+            bool success = concludeBinaryOption(expiredBinaryOptions[i]);
+            require(success, "Failed to conclude binary option");
+        }
     }
 }
