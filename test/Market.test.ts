@@ -1,146 +1,144 @@
-import { ethers, network } from "hardhat";
+import {
+    loadFixture,
+    time,
+} from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { expect } from "chai";
+import hre from "hardhat";
 
 describe("Market", function () {
-    let OneZero: any;
-    let oneZero: any;
-    let OZ: any;
-    let oz: any;
-    let Storage: any;
-    let storage: any;
-    let owner: any;
-    let addr1: any;
-    let addr2: any;
-    let addr3: any;
-    let dummyChainlinkKeeper: any;
-    const MINIMUM_DURATION: bigint = BigInt(1200);
+    async function deployMarketFixture() {
+        const NAME = "CommissionToken";
+        const SYMBOL = "CT";
+        const CAP = BigInt(100e18);
+        const COMMISSION_PERIOD_DURATION = BigInt(10); // 10 seconds
+        const MINIMUM_OPTION_DURATION = BigInt(1200); // 20 minutes
+        const COMMISSIONS = BigInt(10e10);
 
-    beforeEach(async function () {
-        OneZero = await ethers.getContractFactory("OneZero");
-        OZ = await ethers.getContractFactory("OZ");
-        Storage = await ethers.getContractFactory("Storage");
-        [owner, addr1, addr2, addr3, dummyChainlinkKeeper] =
-            await ethers.getSigners();
-        const NAME = "One Zero";
-        const SYMBOL = "OZ";
-        const CAP = ethers.parseUnits("1.0", 24);
-        const EXCHANGE_RATE = ethers.parseUnits("1.0", 15);
-        const OWNER_INITIAL_ALLOCATION: bigint = BigInt(0); // 0 OZ for testing purposes
-        oz = await OZ.deploy(
-            NAME,
-            SYMBOL,
-            CAP,
-            EXCHANGE_RATE,
-            OWNER_INITIAL_ALLOCATION,
+        const [marketAccount, owner, user1, user2, user3, chainlinkKeeper] =
+            await hre.ethers.getSigners();
+
+        const commissionToken = await hre.ethers.deployContract(
+            "CommissionToken",
+            [NAME, SYMBOL, CAP, COMMISSION_PERIOD_DURATION],
+            owner,
         );
-        await oz.waitForDeployment();
-        storage = await Storage.deploy();
-        await storage.waitForDeployment();
-        oneZero = await OneZero.deploy(
-            oz.getAddress(),
-            storage.getAddress(),
-            MINIMUM_DURATION,
+        const commissionTokenAddress = await commissionToken.getAddress();
+
+        await commissionToken
+            .connect(owner)
+            .transfer(user1.address, BigInt(50e18));
+
+        await commissionToken
+            .connect(marketAccount)
+            .distributeCommission({ value: COMMISSIONS });
+
+        const storage = await hre.ethers.deployContract("Storage", owner);
+        const storageAddress = await storage.getAddress();
+
+        const market = await hre.ethers.deployContract(
+            "Market",
+            [commissionTokenAddress, storageAddress, MINIMUM_OPTION_DURATION],
+            owner,
         );
-        await oneZero.waitForDeployment();
-        await storage.setOneZeroAddress(oneZero.getAddress());
-    });
+        const marketAddress = await market.getAddress();
 
-    it("Should deploy the contract correctly", async function () {
-        expect(await oneZero.getAddress()).to.properAddress;
-    });
+        await market.connect(owner).updateAdmin(user1, true);
+        await market.connect(owner).updateAdmin(user2, true);
 
-    it("Should initialise the OZ address correctly", async function () {
-        expect(await oneZero.getOZAddress()).to.equal(await oz.getAddress());
-    });
+        await commissionToken.connect(owner).setMarket(marketAddress);
+        await storage.connect(owner).setMarket(marketAddress);
 
-    it("Should initialise the storage address correctly", async function () {
-        expect(await oneZero.getStorageAddress()).to.equal(
-            await storage.getAddress(),
-        );
-    });
-
-    it("Should initialise the owner correctly", async function () {
-        expect(await oneZero.getOwner()).to.equal(owner.address);
-    });
-
-    it("Should initialise the minimum duration correctly", async function () {
-        expect(await oneZero.getMinimumDuration()).to.equal(MINIMUM_DURATION);
-    });
-
-    it("Should initialise the admin mapping correctly", async function () {
-        expect(await oneZero.isAdmin(addr1.address)).to.be.false;
-        expect(await oneZero.isAdmin(addr2.address)).to.be.false;
-        expect(await oneZero.isAdmin(addr3.address)).to.be.false;
-    });
+        return {
+            market,
+            owner,
+            user1,
+            user2,
+            user3,
+            chainlinkKeeper,
+            MINIMUM_OPTION_DURATION,
+        };
+    }
 
     it("Should not allow non-owners to add admins", async function () {
+        const { market, user1, user2 } = await loadFixture(deployMarketFixture);
         await expect(
-            oneZero.connect(addr1).updateAdmin(addr2.address, true),
+            market.connect(user1).updateAdmin(user2.address, true),
         ).to.be.revertedWith("Only owner can call this function");
     });
 
     it("Should allow owner to add admins", async function () {
-        await expect(oneZero.connect(owner).updateAdmin(addr1.address, true)).to
+        const { market, owner, user1 } = await loadFixture(deployMarketFixture);
+        await expect(market.connect(owner).updateAdmin(user1.address, true)).to
             .not.be.reverted;
     });
 
     it("Should set admin status correctly", async function () {
-        await oneZero.connect(owner).updateAdmin(addr1.address, true);
-        expect(await oneZero.isAdmin(addr1.address)).to.be.true;
-        await oneZero.connect(owner).updateAdmin(addr1.address, false);
-        expect(await oneZero.isAdmin(addr1.address)).to.be.false;
+        const { market, owner, user1 } = await loadFixture(deployMarketFixture);
+
+        await market.connect(owner).updateAdmin(user1.address, false);
+        expect(await market.isAdmin(user1.address)).to.be.false;
+
+        await market.connect(owner).updateAdmin(user1.address, true);
+        expect(await market.isAdmin(user1.address)).to.be.true;
     });
 
     it("Should not allow non-owners to transfer ownership", async function () {
+        const { market, user1, user2 } = await loadFixture(deployMarketFixture);
         await expect(
-            oneZero.connect(addr1).transferOwnership(addr2.address),
+            market.connect(user1).transferOwnership(user2.address),
         ).to.be.revertedWith("Only owner can call this function");
     });
 
     it("Should allow owner to transfer ownership", async function () {
-        await expect(oneZero.connect(owner).transferOwnership(addr1.address)).to
+        const { market, owner, user1 } = await loadFixture(deployMarketFixture);
+        await expect(market.connect(owner).transferOwnership(user1.address)).to
             .not.be.reverted;
     });
 
     it("Should transfer ownership correctly", async function () {
-        await oneZero.connect(owner).transferOwnership(addr1.address);
-        expect(await oneZero.getOwner()).to.equal(addr1.address);
+        const { market, owner, user1 } = await loadFixture(deployMarketFixture);
+        await market.connect(owner).transferOwnership(user1.address);
+        expect(await market.getOwner()).to.equal(user1.address);
     });
 
-    // Storing and retrieving the minimum duration accurately has been tested as part of checking if the minimum duration has been initialised correctly
-
     it("Should not allow non-owners to update the minimum duration", async function () {
+        const { market, user1 } = await loadFixture(deployMarketFixture);
         await expect(
-            oneZero.connect(addr1).setMinimumDuration(MINIMUM_DURATION),
+            market.connect(user1).setMinimumDuration(1),
         ).to.be.revertedWith("Only owner can call this function");
     });
 
     it("Should allow owner to update the minimum duration", async function () {
-        await expect(
-            oneZero.connect(owner).setMinimumDuration(MINIMUM_DURATION),
-        ).to.not.be.reverted;
+        const { market, owner } = await loadFixture(deployMarketFixture);
+        await expect(market.connect(owner).setMinimumDuration(1)).to.not.be
+            .reverted;
     });
 
     it("Should update the minimum duration correctly", async function () {
-        await oneZero.connect(owner).setMinimumDuration(MINIMUM_DURATION);
-        expect(await oneZero.getMinimumDuration()).to.equal(MINIMUM_DURATION);
+        const { market, owner } = await loadFixture(deployMarketFixture);
+        await market.connect(owner).setMinimumDuration(1);
+        expect(await market.getMinimumDuration()).to.equal(1);
     });
 
     it("Should retrieve binary options details correctly", async function () {
+        const { market, owner, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        let binaryOption = await oneZero.getBinaryOption(BigInt(0));
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        let binaryOption = await market.getBinaryOption(BigInt(0));
         expect(binaryOption.id).to.equal(BigInt(0));
         expect(binaryOption.title).to.equal(TITLE);
         expect(binaryOption.start).to.equal(START);
-        expect(binaryOption.duration).to.equal(DURATION);
+        expect(binaryOption.duration).to.equal(MINIMUM_OPTION_DURATION);
         expect(binaryOption.commissionRate).to.equal(COMMISSION_RATE);
         expect(binaryOption.commissionCollected).to.equal(BigInt(0));
         expect(binaryOption.outcome).to.equal(BigInt(0));
@@ -151,92 +149,126 @@ describe("Market", function () {
     });
 
     it("Should retrieve the correct list of binary options a user has participated in", async function () {
+        const { market, owner, user1, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await network.provider.send("evm_increaseTime", [20]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to start
-        await oneZero.connect(addr1).addPosition(BigInt(0), true, {
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await time.increase(20);
+        await market.connect(user1).addPosition(BigInt(0), true, {
             value: BigInt(1e18),
         });
-        await oneZero.connect(addr1).addPosition(BigInt(1), true, {
+        await market.connect(user1).addPosition(BigInt(1), true, {
             value: BigInt(1e18),
         });
-        let userParticipatedOptions = await oneZero.getUserParticipatedOptions(
-            addr1.address,
-        );
+        let userParticipatedOptions = await market
+            .connect(user1)
+            .getUserParticipatedOptions();
         expect(userParticipatedOptions).to.have.lengthOf(2);
         expect(userParticipatedOptions[0]).to.equal(BigInt(0));
         expect(userParticipatedOptions[1]).to.equal(BigInt(1));
     });
 
     it("Should retrieve the correct list of active binary options", async function () {
+        const { market, owner, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        let activeOptions = await oneZero.getActiveBinaryOptions();
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        let activeOptions = await market.getActiveBinaryOptions();
         expect(activeOptions).to.have.lengthOf(2);
         expect(activeOptions[0]).to.equal(BigInt(0));
         expect(activeOptions[1]).to.equal(BigInt(1));
     });
 
     it("Should retrieve the correct list of concluded binary options", async function () {
+        const { market, owner, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await network.provider.send("evm_increaseTime", [1220]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to expire
-        await oneZero.performUpkeep(
-            ethers.AbiCoder.defaultAbiCoder().encode(
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await time.increase(1220);
+        await market.performUpkeep(
+            hre.ethers.AbiCoder.defaultAbiCoder().encode(
                 ["uint256[]"],
                 [[BigInt(0), BigInt(1)]],
             ),
         );
-        let concludedBinaryOptions = await oneZero.getConcludedBinaryOptions();
+        let concludedBinaryOptions = await market.getConcludedBinaryOptions();
         expect(concludedBinaryOptions).to.have.lengthOf(2);
         expect(concludedBinaryOptions[0]).to.equal(BigInt(0));
         expect(concludedBinaryOptions[1]).to.equal(BigInt(1));
     });
 
     it("Should retrieve the correct details of a user's long position", async function () {
+        const { market, owner, user1, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await network.provider.send("evm_increaseTime", [20]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to start
-        await oneZero.connect(addr1).addPosition(BigInt(0), true, {
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await time.increase(20);
+        await market.connect(user1).addPosition(BigInt(0), true, {
             value: BigInt(1e18),
         });
-        let longPosition = await oneZero.getUserLongPosition(
+        let longPosition = await market.getUserLongPosition(
             BigInt(0),
-            addr1.address,
+            user1.address,
         );
         expect(longPosition).to.equal(
             BigInt(1e18 * (1 - Number(COMMISSION_RATE) / 10000)),
@@ -244,23 +276,26 @@ describe("Market", function () {
     });
 
     it("Should retrieve the correct details of a user's short position", async function () {
+        const { market, owner, user1, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await network.provider.send("evm_increaseTime", [20]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to start
-        await oneZero.connect(addr1).addPosition(BigInt(0), false, {
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await time.increase(20);
+        await market.connect(user1).addPosition(BigInt(0), false, {
             value: BigInt(1e18),
         });
-        let shortPosition = await oneZero.getUserShortPosition(
+        let shortPosition = await market.getUserShortPosition(
             BigInt(0),
-            addr1.address,
+            user1.address,
         );
         expect(shortPosition).to.equal(
             BigInt(1e18 * (1 - Number(COMMISSION_RATE) / 10000)),
@@ -268,51 +303,56 @@ describe("Market", function () {
     });
 
     it("Should not allow non-owner and non-admins to add binary options", async function () {
+        const { market, user1, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
         await expect(
-            oneZero
-                .connect(addr1)
-                .addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE),
+            market
+                .connect(user1)
+                .addBinaryOption(
+                    TITLE,
+                    START,
+                    MINIMUM_OPTION_DURATION,
+                    COMMISSION_RATE,
+                ),
         ).to.be.revertedWith("Only owner and admins can call this function");
     });
 
     it("Should allow owner to add binary options", async function () {
+        const { market, owner, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
         await expect(
-            oneZero
+            market
                 .connect(owner)
-                .addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE),
+                .addBinaryOption(
+                    TITLE,
+                    START,
+                    MINIMUM_OPTION_DURATION,
+                    COMMISSION_RATE,
+                ),
         ).to.not.be.reverted;
     });
 
     it("Should allow admins to add binary options", async function () {
+        const { market, user1, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.connect(owner).updateAdmin(addr1.address, true);
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
         await expect(
-            oneZero
-                .connect(addr1)
-                .addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE),
+            market
+                .connect(user1)
+                .addBinaryOption(
+                    TITLE,
+                    START,
+                    MINIMUM_OPTION_DURATION,
+                    COMMISSION_RATE,
+                ),
         ).to.not.be.reverted;
     });
 
@@ -321,73 +361,87 @@ describe("Market", function () {
     // Adding positions correctly has been tested as part of checking that the getter functions can retrieve the correct details of a user's long or short position
 
     it("Should return false when chainlink keeper calls checkUpkeep and there are no options past their expiry", async function () {
+        const { market, owner, chainlinkKeeper, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+
         // Before option starts, checkUpkeep should return false
-        let checkUpkeepFirstResponse = await oneZero
-            .connect(dummyChainlinkKeeper)
-            .checkUpkeep(ethers.AbiCoder.defaultAbiCoder().encode([], []));
+        let checkUpkeepFirstResponse = await market
+            .connect(chainlinkKeeper)
+            .checkUpkeep(hre.ethers.AbiCoder.defaultAbiCoder().encode([], []));
         expect(checkUpkeepFirstResponse[0]).to.be.false;
         expect(checkUpkeepFirstResponse[1]).to.equal(
-            ethers.AbiCoder.defaultAbiCoder().encode(["uint256[]"], [[]]),
+            hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256[]"], [[]]),
         );
-        await network.provider.send("evm_increaseTime", [20]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to start
+
+        await time.increase(20);
+
         // After option starts, checkUpkeep should also return false
-        let checkUpkeepSecondResponse = await oneZero
-            .connect(dummyChainlinkKeeper)
-            .checkUpkeep(ethers.AbiCoder.defaultAbiCoder().encode([], []));
+        let checkUpkeepSecondResponse = await market
+            .connect(chainlinkKeeper)
+            .checkUpkeep(hre.ethers.AbiCoder.defaultAbiCoder().encode([], []));
         expect(checkUpkeepSecondResponse[0]).to.be.false;
         expect(checkUpkeepSecondResponse[1]).to.equal(
-            ethers.AbiCoder.defaultAbiCoder().encode(["uint256[]"], [[]]),
+            hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256[]"], [[]]),
         );
     });
 
     it("Should return true when chainlink keeper calls checkUpkeep and there are options past their expiry", async function () {
+        const { market, owner, chainlinkKeeper, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await oneZero.addBinaryOption(
-            TITLE,
-            START,
-            DURATION + BigInt(500),
-            COMMISSION_RATE,
-        );
-        await network.provider.send("evm_increaseTime", [1220]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for first option to expire
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION + BigInt(500),
+                COMMISSION_RATE,
+            );
+
+        await time.increase(1220);
+
         // checkUpkeep should return True, but identify that only the first option needs to be concluded
-        let checkUpkeepFirstResponse = await oneZero
-            .connect(dummyChainlinkKeeper)
-            .checkUpkeep(ethers.AbiCoder.defaultAbiCoder().encode([], []));
+        let checkUpkeepFirstResponse = await market
+            .connect(chainlinkKeeper)
+            .checkUpkeep(hre.ethers.AbiCoder.defaultAbiCoder().encode([], []));
         expect(checkUpkeepFirstResponse[0]).to.be.true;
         expect(checkUpkeepFirstResponse[1]).to.equal(
-            ethers.AbiCoder.defaultAbiCoder().encode(
+            hre.ethers.AbiCoder.defaultAbiCoder().encode(
                 ["uint256[]"],
                 [[BigInt(0)]],
             ),
         );
-        await network.provider.send("evm_increaseTime", [520]);
-        await network.provider.send("evm_mine"); // Mine another new block to skip ahead for second option to expire
+
+        await time.increase(520);
+
         // checkUpkeep should return True and now identify that both options need to be concluded
-        let checkUpkeepSecondResponse = await oneZero
-            .connect(dummyChainlinkKeeper)
-            .checkUpkeep(ethers.AbiCoder.defaultAbiCoder().encode([], []));
+        let checkUpkeepSecondResponse = await market
+            .connect(chainlinkKeeper)
+            .checkUpkeep(hre.ethers.AbiCoder.defaultAbiCoder().encode([], []));
         expect(checkUpkeepSecondResponse[0]).to.be.true;
         expect(checkUpkeepSecondResponse[1]).to.equal(
-            ethers.AbiCoder.defaultAbiCoder().encode(
+            hre.ethers.AbiCoder.defaultAbiCoder().encode(
                 ["uint256[]"],
                 [[BigInt(0), BigInt(1)]],
             ),
@@ -395,23 +449,26 @@ describe("Market", function () {
     });
 
     it("Should not allow performUpkeep to conclude options prematurely", async function () {
+        const { market, owner, user1, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await network.provider.send("evm_increaseTime", [20]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to start
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await time.increase(20);
         // Even if performUpkeep is called by a malicious party with the correct parameters, it should not be able to conclude the option prematurely
         await expect(
-            oneZero
-                .connect(addr1)
+            market
+                .connect(user1)
                 .performUpkeep(
-                    ethers.AbiCoder.defaultAbiCoder().encode(
+                    hre.ethers.AbiCoder.defaultAbiCoder().encode(
                         ["uint256[]"],
                         [[BigInt(0)]],
                     ),
@@ -420,28 +477,33 @@ describe("Market", function () {
     });
 
     it("Should not throw any errors if binary option concludes without any stakers", async function () {
+        const { market, owner, chainlinkKeeper, MINIMUM_OPTION_DURATION } =
+            await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await oneZero.addBinaryOption(
-            TITLE,
-            START,
-            DURATION + BigInt(500),
-            COMMISSION_RATE,
-        );
-        await network.provider.send("evm_increaseTime", [1220]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for first option to expire
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION + BigInt(500),
+                COMMISSION_RATE,
+            );
+        await time.increase(1220);
         await expect(
-            oneZero
-                .connect(dummyChainlinkKeeper)
+            market
+                .connect(chainlinkKeeper)
                 .performUpkeep(
-                    ethers.AbiCoder.defaultAbiCoder().encode(
+                    hre.ethers.AbiCoder.defaultAbiCoder().encode(
                         ["uint256[]"],
                         [[BigInt(0)]],
                     ),
@@ -450,33 +512,42 @@ describe("Market", function () {
     });
 
     it("Should not throw any errors if binary option concludes without any winners", async function () {
+        const {
+            market,
+            owner,
+            user1,
+            chainlinkKeeper,
+            MINIMUM_OPTION_DURATION,
+        } = await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await oneZero.addBinaryOption(
-            TITLE,
-            START,
-            DURATION + BigInt(500),
-            COMMISSION_RATE,
-        );
-        await network.provider.send("evm_increaseTime", [20]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for first option to start
-        await oneZero
-            .connect(addr1)
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION + BigInt(500),
+                COMMISSION_RATE,
+            );
+        await time.increase(20);
+        await market
+            .connect(user1)
             .addPosition(BigInt(0), false, { value: BigInt(1e18) }); // addr1 goes short with 1 ether
-        await network.provider.send("evm_increaseTime", [1200]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for first option to expire
+        await time.increase(1200);
         await expect(
-            oneZero
-                .connect(dummyChainlinkKeeper)
+            market
+                .connect(chainlinkKeeper)
                 .performUpkeep(
-                    ethers.AbiCoder.defaultAbiCoder().encode(
+                    hre.ethers.AbiCoder.defaultAbiCoder().encode(
                         ["uint256[]"],
                         [[BigInt(0)]],
                     ),
@@ -485,29 +556,39 @@ describe("Market", function () {
     });
 
     it("Should not allow performUpkeep to conclude an option multiple times", async function () {
+        const {
+            market,
+            owner,
+            user1,
+            chainlinkKeeper,
+            MINIMUM_OPTION_DURATION,
+        } = await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
-        const DURATION: bigint = MINIMUM_DURATION;
-        let latestBlock = await ethers.provider.getBlock("latest");
-        if (latestBlock === null) {
-            throw new Error("Failed to fetch the latest block.");
-        }
-        const START: bigint = BigInt(latestBlock.timestamp) + BigInt(10);
-        const COMMISSION_RATE: bigint = BigInt(10);
-        await oneZero.addBinaryOption(TITLE, START, DURATION, COMMISSION_RATE);
-        await network.provider.send("evm_increaseTime", [1220]);
-        await network.provider.send("evm_mine"); // Mine a new block to skip ahead for option to expire
-        await oneZero.performUpkeep(
-            ethers.AbiCoder.defaultAbiCoder().encode(
-                ["uint256[]"],
-                [[BigInt(0)]],
-            ),
-        );
+        const START = BigInt(await time.latest()) + BigInt(10);
+        const COMMISSION_RATE = BigInt(10);
+        await market
+            .connect(owner)
+            .addBinaryOption(
+                TITLE,
+                START,
+                MINIMUM_OPTION_DURATION,
+                COMMISSION_RATE,
+            );
+        await time.increase(1220);
+        await market
+            .connect(chainlinkKeeper)
+            .performUpkeep(
+                hre.ethers.AbiCoder.defaultAbiCoder().encode(
+                    ["uint256[]"],
+                    [[BigInt(0)]],
+                ),
+            );
         // Even if performUpkeep is called by a malicious party with the correct parameters, it should not be able to conclude the option multiple times
         await expect(
-            oneZero
-                .connect(addr1)
+            market
+                .connect(user1)
                 .performUpkeep(
-                    ethers.AbiCoder.defaultAbiCoder().encode(
+                    hre.ethers.AbiCoder.defaultAbiCoder().encode(
                         ["uint256[]"],
                         [[BigInt(0)]],
                     ),
