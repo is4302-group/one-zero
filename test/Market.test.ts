@@ -12,9 +12,8 @@ describe("Market", function () {
         const CAP = BigInt(100e18);
         const COMMISSION_PERIOD_DURATION = BigInt(10); // 10 seconds
         const MINIMUM_OPTION_DURATION = BigInt(1200); // 20 minutes
-        const COMMISSIONS = BigInt(10e10);
 
-        const [marketAccount, owner, user1, user2, user3, chainlinkKeeper] =
+        const [owner, user1, user2, user3, chainlinkKeeper] =
             await hre.ethers.getSigners();
 
         const commissionToken = await hre.ethers.deployContract(
@@ -23,14 +22,6 @@ describe("Market", function () {
             owner,
         );
         const commissionTokenAddress = await commissionToken.getAddress();
-
-        await commissionToken
-            .connect(owner)
-            .transfer(user1.address, BigInt(50e18));
-
-        await commissionToken
-            .connect(marketAccount)
-            .distributeCommission({ value: COMMISSIONS });
 
         const storage = await hre.ethers.deployContract("Storage", owner);
         const storageAddress = await storage.getAddress();
@@ -304,14 +295,14 @@ describe("Market", function () {
     });
 
     it("Should not allow non-owner and non-admins to add binary options", async function () {
-        const { market, user1, MINIMUM_OPTION_DURATION } =
+        const { market, user3, MINIMUM_OPTION_DURATION } =
             await loadFixture(deployMarketFixture);
         const TITLE: string = "test binary option";
         const START = BigInt(await time.latest()) + BigInt(10);
         const COMMISSION_RATE = BigInt(10);
         await expect(
             market
-                .connect(user1)
+                .connect(user3)
                 .addBinaryOption(
                     TITLE,
                     START,
