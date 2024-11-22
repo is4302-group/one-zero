@@ -41,7 +41,7 @@ describe("CommissionToken", function () {
         };
     }
 
-    it("distributes commissions among existing token holders correctly", async function () {
+    it("Should distribute commissions among existing token holders correctly", async function () {
         const { commissionToken, owner, user1 } = await loadFixture(
             deployCommissionTokenFixture,
         );
@@ -57,7 +57,7 @@ describe("CommissionToken", function () {
             .withArgs(user1.address, BigInt(5e10));
     });
 
-    it("distributes commissions among new token holders correctly", async function () {
+    it("Should distribute commissions among new token holders correctly", async function () {
         const { commissionToken, marketAccount, owner, user2 } =
             await loadFixture(deployCommissionTokenFixture);
 
