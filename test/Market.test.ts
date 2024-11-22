@@ -1212,4 +1212,3 @@ describe("Market", function () {
     //         expect (await ethers.provider.getBalance(addr3.address)).to.equal(addr3BalanceBeforeWinnings + BigInt(1e18 + 2e18 + 3e18) * (BigInt(10000) - COMMISSION_RATE) / BigInt(10000) + BigInt(1e18 + 2e18 + 3e18) * COMMISSION_RATE / BigInt(10000) * BigInt(1000) / BigInt(4000)); // Shorts won so addr3 will receive the full amount (less commission) since only addr3 won and will also receive 1/4 of 0.006 ether commission
     //     });
 });
-
