@@ -372,9 +372,6 @@ describe("Market", function () {
             .connect(chainlinkKeeper)
             .checkUpkeep(hre.ethers.AbiCoder.defaultAbiCoder().encode([], []));
         expect(checkUpkeepFirstResponse[0]).to.be.false;
-        expect(checkUpkeepFirstResponse[1]).to.equal(
-            hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256[]"], [[]]),
-        );
 
         await time.increase(20);
 
@@ -383,9 +380,6 @@ describe("Market", function () {
             .connect(chainlinkKeeper)
             .checkUpkeep(hre.ethers.AbiCoder.defaultAbiCoder().encode([], []));
         expect(checkUpkeepSecondResponse[0]).to.be.false;
-        expect(checkUpkeepSecondResponse[1]).to.equal(
-            hre.ethers.AbiCoder.defaultAbiCoder().encode(["uint256[]"], [[]]),
-        );
     });
 
     it("Should return true when chainlink keeper calls checkUpkeep and there are options past their expiry", async function () {

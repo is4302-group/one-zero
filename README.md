@@ -35,15 +35,33 @@ A binary options marketplace.
 
 ## Walkthrough
 
+### Creating options
+
 - option is created on the market
-- option is made available for staking
-  - users place their stakes on the option (long/short)
-  - chainlink keepers continuously poll market to clean up concluded options
-- when an option has concluded
-  - outcome is retrieved from an oracle
-  - winnings are paid out to winners
-    - total stake (long + short) divided among winners (long/short)
-  - commissions are sent to the commission token contract
-- commission token holders claim their commissions
-  - amount claimed determined by balance of commission tokens
-  - last collected commission is tracked to prevent double counting
+  - Market.addBinaryOption (Market.sol:142)
+
+### Option is available for staking
+
+- users place their stakes on the option (long/short)
+  - Market.addPosition (Market.sol:160)
+- chainlink keepers continuously poll market to clean up concluded options
+  - Market.checkUpkeep (Market.sol:255)
+  - Market.performUpkeep (Market.sol:287)
+
+### Option has concluded
+
+> In chainlink upkeep method, concludeBinaryOption (Market.sol:181) is called
+> The following is a walkthrough of what happens when an option is concluded
+
+- outcome is retrieved from an oracle
+  - Market.retrieveOutcome (Market.sol:211)
+- winnings are paid out to winners
+  - Market.payOutWinnings (Market.sol:227)
+- commissions are sent to the commission token contract
+  - Market.payOutCommission (Market.sol:220)
+
+### Commission management
+
+- commission token holders claim commissions for periods from their last claimed
+  period up to the current period
+  - CommissionToken.claimCommission (CommissionToken.sol:43)

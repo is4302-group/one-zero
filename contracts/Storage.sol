@@ -26,11 +26,11 @@ contract Storage {
         uint256 commissionRate; // Percentage of bet in basis points
         uint256 commissionCollected; // Total commission collected in wei
         Outcome outcome;
-        uint256 totalLongs; // Total amount of longs in USDC (i.e., 1e6)
-        mapping(address => uint256) longs; // Mapping of addresses to longs in USDC (i.e., 1e6)
+        uint256 totalLongs; // Total amount of long stake
+        mapping(address => uint256) longs; // Mapping of addresses to long stakes
         address[] longStakers; // Array of addresses which have staked in a long position
-        uint256 totalShorts; // Total amount of shorts in USDC (i.e., 1e6)
-        mapping(address => uint256) shorts; // Mapping of addresses to shorts in USDC (i.e., 1e6)
+        uint256 totalShorts; // Total amount of short stake
+        mapping(address => uint256) shorts; // Mapping of addresses to short stakes
         address[] shortStakers; // Array of addresses which have staked in a short position
     }
 
@@ -42,9 +42,9 @@ contract Storage {
         uint256 commissionRate; // Percentage of bet in basis points
         uint256 commissionCollected; // Total commission collected in USDC (i.e., 1e6)
         Outcome outcome;
-        uint256 totalLongs; // Total amount of longs in USDC (i.e., 1e6)
+        uint256 totalLongs; // Total amount of long stake
         address[] longStakers; // Array of addresses which have staked in a long position
-        uint256 totalShorts; // Total amount of shorts in USDC (i.e., 1e6)
+        uint256 totalShorts; // Total amount of short stake
         address[] shortStakers; // Array of addresses which have staked in a short position
     }
 
@@ -158,8 +158,7 @@ contract Storage {
         return true;
     }
 
-    // Function contains logic that could potentially cost alot of gas
-    // - Specifically, adding the id of the binary option to the userParticipatedOptions array could cost alot of gas if it gets too large
+    // - adding the id of the binary option to the userParticipatedOptions array could cost alot of gas if it gets too large
     // - Potential workaround: limit the history of binary options that a user has participated in
     function createPosition(uint256 _id, address _user, uint256 _amount, bool _predictedOutcome)
         public
@@ -199,8 +198,7 @@ contract Storage {
         return true;
     }
 
-    // Function contains logic that could potentially cost alot of gas
-    // - Specifically, removing the id of the concluded binary option from the activeBinaryOptions and adding it to the concludedBinaryOptions array could cost alot of gas if the arrays get too large
+    // - removing the id of the concluded binary option from the activeBinaryOptions and adding it to the concludedBinaryOptions array could cost alot of gas if the arrays get too large
     // - Potential workaround: none on-chain but will be resolved if data storage is shifted off-chain
     function endBinaryOption(uint256 _id, bool _outcome) public onlyMarket returns (bool) {
         binaryOption storage option = binaryOptions[_id]; // Retrieve binary option

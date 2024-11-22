@@ -28,6 +28,7 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
         _mint(msg.sender, _cap);
     }
 
+    // called when option is closed and market contract sends commissions to this contract
     function distributeCommission() public payable {
         require(msg.sender == market, "Only market contract can deposit commissions");
 
@@ -65,7 +66,10 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
     }
 
     function _update(address from, address to, uint256 value) internal override {
-        userLastClaimedPeriod[to] = getCurrentPeriodIndex();
+        // initialise last claimed period of new holders to current period to prevent new holders from claiming legacy commissions
+        if (userLastClaimedPeriod[to] == 0) {
+            userLastClaimedPeriod[to] = getCurrentPeriodIndex();
+        }
         super._update(from, to, value);
     }
 
@@ -73,7 +77,7 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
         uint256 currTime = block.timestamp;
         (, uint256 timeDelta) = currTime.trySub(startTime);
         (, uint256 periodIndex) = timeDelta.tryDiv(commissionPeriodDuration);
-        return periodIndex;
+        return periodIndex + 1; // deconflict with default value of mapping
     }
 
     function calculatePeriodCommission(uint256 _userTokenBalance, uint256 _periodIndex)
@@ -95,6 +99,8 @@ contract CommissionToken is ReentrancyGuard, ERC20Capped, Ownable {
         return userCommission;
     }
 
+    // - market contract needs the address of this contract to call functions, therefore this contract is deployed first
+    // - Function therefore required to specify the address of the market contract for access control
     function setMarket(address _market) public onlyOwner {
         market = _market;
     }
