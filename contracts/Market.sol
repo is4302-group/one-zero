@@ -193,19 +193,15 @@ contract Market is AutomationCompatibleInterface {
         bool conclusionSuccess = storageContract.endBinaryOption(_id, outcome);
         require(conclusionSuccess, "Failed to conclude binary option");
 
+        // Only pay out winnings if there are winners
         if ((outcome && option.totalLongs != 0) || (!outcome && option.totalShorts != 0)) {
-            // Only pay out winnings if there are winners
-            // Pay out winnings
             bool winningPaymentSuccess = payOutWinnings(_id, outcome);
             require(winningPaymentSuccess, "Failed to pay out winnings");
         }
 
         // Pay out commission
-        if (commissionToken.totalSupply() > 0) {
-            // Only pay out commission if there are OZ token holders
-            bool commissionPaymentSuccess = payOutCommission(_id);
-            require(commissionPaymentSuccess, "Failed to pay out commission");
-        }
+        bool commissionPaymentSuccess = payOutCommission(_id);
+        require(commissionPaymentSuccess, "Failed to pay out commission");
 
         emit BinaryOptionConcluded(_id, outcome);
         return true;
@@ -234,21 +230,18 @@ contract Market is AutomationCompatibleInterface {
 
         if (_outcome) {
             // Long stakers won
-            address[] memory winners = option.longStakers;
-            uint256 payoutPerETHOfWinningStake = winnings * 10 ** commissionToken.decimals() / option.totalLongs;
-            for (uint256 i = 0; i < winners.length; i++) {
-                payable(winners[i]).transfer(
-                    payoutPerETHOfWinningStake * getUserLongPosition(_id, winners[i]) / 10 ** commissionToken.decimals()
+            uint256 payoutPerETHOfWinningStake = winnings * 1e18 / option.totalLongs; // multiply by 1e18 to account for underflow
+            for (uint256 i = 0; i < option.longStakers.length; i++) {
+                payable(option.longStakers[i]).transfer(
+                    payoutPerETHOfWinningStake * getUserLongPosition(_id, option.longStakers[i]) / 1e18 // divide by 1e18 to remove
                 );
             }
         } else {
             // Short stakers won
-            address[] memory winners = option.shortStakers;
-            uint256 payoutPerETHOfWinningStake = winnings * 10 ** commissionToken.decimals() / option.totalShorts;
-            for (uint256 i = 0; i < winners.length; i++) {
-                payable(winners[i]).transfer(
-                    payoutPerETHOfWinningStake * getUserShortPosition(_id, winners[i])
-                        / 10 ** commissionToken.decimals()
+            uint256 payoutPerETHOfWinningStake = winnings * 1e18 / option.totalShorts; // multiply by 1e18 to account for underflow
+            for (uint256 i = 0; i < option.shortStakers.length; i++) {
+                payable(option.shortStakers[i]).transfer(
+                    payoutPerETHOfWinningStake * getUserShortPosition(_id, option.shortStakers[i]) / 1e18 // divide by 1e18 to remove
                 );
             }
         }
@@ -260,7 +253,7 @@ contract Market is AutomationCompatibleInterface {
     // - Return True and the id(s) of the expired binary option(s) if any
     // - Else return False and empty performData
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory performData) {
-        uint256[] memory activeBinaryOptions = storageContract.readActiveBinaryOptions(); // Retrieve active binary options
+        uint256[] memory activeBinaryOptions = storageContract.readActiveBinaryOptions();
         uint256[] memory expiredBinaryOptions = new uint256[](activeBinaryOptions.length); // Allocate memory array for the expired options
         uint256 expiredCount = 0;
 
@@ -273,15 +266,15 @@ contract Market is AutomationCompatibleInterface {
             }
         }
 
-        // Return the result with the expired options array encoded
+        // If there are no expired options, return false
+        if (expiredCount == 0) {
+            return (false, abi.encode(expiredBinaryOptions)); // No upkeep needed
+        }
+
+        // Trim the resulting array to remove default values
         uint256[] memory trimmedExpiredBinaryOptions = new uint256[](expiredCount);
         for (uint256 i = 0; i < expiredCount; i++) {
             trimmedExpiredBinaryOptions[i] = expiredBinaryOptions[i];
-        }
-
-        // If there are no expired options, return false
-        if (expiredCount == 0) {
-            return (false, abi.encode(trimmedExpiredBinaryOptions)); // No upkeep needed
         }
 
         // Encode the result and return it
