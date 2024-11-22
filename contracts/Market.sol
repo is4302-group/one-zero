@@ -1,58 +1,47 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.27;
 
-// Import statements
-// import "hardhat/console.sol"; // Uncomment this line to use console.log
 import "./Storage.sol";
-import "./OZ.sol";
+import "./CommissionToken.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
-contract OneZero is AutomationCompatibleInterface {
-    // State variables
-    // - Consider setting to public as required for automatically generated getter functions
-    OZ oz;
+contract Market is AutomationCompatibleInterface {
+    CommissionToken commissionToken;
     Storage storageContract;
     address private owner;
     uint256 private minimumDuration; // Minimum duration for a binary option in seconds
-    mapping(address => bool) private admin; // Mapping of admin addresses
+    mapping(address => bool) private admins;
 
-    // Enums
-
-
-    // Structs
-
-
-    // Events
     event BinaryOptionCreated(uint256 id, string title, uint256 start, uint256 duration, uint256 commissionRate);
     event LongAdded(uint256 id, address user, uint256 amount);
     event ShortAdded(uint256 id, address user, uint256 amount);
     event BinaryOptionConcluded(uint256 id, bool outcome);
     event CommissionPaid(uint256 id);
 
-
-    // Modifiers
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call this function");
         _;
     }
 
     modifier onlyAdminOrOwner(address _address) {
-        require(msg.sender == owner || admin[_address], "Only owner and admins can call this function");
+        require(msg.sender == owner || admins[_address], "Only owner and admins can call this function");
         _;
     }
 
-    modifier validStake(uint256 _amount){
+    modifier validStake(uint256 _amount) {
         require(_amount > 0, "Amount must be greater than 0");
         _;
     }
 
-    modifier validTitle(string memory _title){
+    modifier validTitle(string memory _title) {
         require(bytes(_title).length > 0, "Title cannot be empty");
         _;
     }
 
-    modifier validDuration(uint256 _duration){
-        require(_duration >= minimumDuration, "Specified duration is shorter than the minimum duration for a binary option");
+    modifier validDuration(uint256 _duration) {
+        require(
+            _duration >= minimumDuration, "Specified duration is shorter than the minimum duration for a binary option"
+        );
         _;
     }
 
@@ -74,17 +63,13 @@ contract OneZero is AutomationCompatibleInterface {
         _;
     }
 
-
-    // Constructor
-    constructor(address payable _ozAddress, address payable _storageContractAddress, uint256 _minimumDuration) {
-        oz = OZ(_ozAddress); // Instantiate OZ token
-        storageContract = Storage(_storageContractAddress); // Instantiate storage contract
-        owner = msg.sender; // Set owner of the contract
-        minimumDuration = _minimumDuration; // Set minimum duration for a binary option
+    constructor(address _commissionToken, address payable _storageContract, uint256 _minimumDuration) {
+        commissionToken = CommissionToken(_commissionToken);
+        storageContract = Storage(_storageContract);
+        owner = msg.sender;
+        minimumDuration = _minimumDuration;
     }
 
-
-    // Fallback and receive functions
     receive() external payable {
         revert("Contract does not accept Ether");
     }
@@ -93,96 +78,92 @@ contract OneZero is AutomationCompatibleInterface {
         revert("Function does not exist");
     }
 
-
-    // Public and external functions
-    // Function to retrieve address of the OZ token
-    function getOZAddress() public view returns (address) {
-        return address(oz);
+    function getCommissionTokenAddress() public view returns (address) {
+        return address(commissionToken);
     }
 
-    // Function to retrieve address of the storage contract
     function getStorageAddress() public view returns (address) {
         return address(storageContract);
     }
 
-    // Function to retrieve owner of the contract
     function getOwner() public view returns (address) {
         return owner;
     }
 
-    // Function to transfer ownership of the contract
-    function transferOwnership(address _newOwner) public onlyOwner() {
+    function transferOwnership(address _newOwner) public onlyOwner {
         owner = _newOwner;
     }
 
-    // Function to retrieve minimum duration of a binary option
     function getMinimumDuration() public view returns (uint256) {
         return minimumDuration;
     }
 
-    // Function to set minimum duration of a binary option
-    function setMinimumDuration(uint256 _minimumDuration) public onlyOwner() {
+    function setMinimumDuration(uint256 _minimumDuration) public onlyOwner {
         minimumDuration = _minimumDuration;
     }
 
-    // Function to check if an address is an admin
     function isAdmin(address _address) public view returns (bool) {
-        return admin[_address];
+        return admins[_address];
     }
 
-    // Function to update admin mapping
-    function updateAdmin(address _address, bool _isAdmin) public onlyOwner() {
-        admin[_address] = _isAdmin;
+    function updateAdmin(address _address, bool _isAdmin) public onlyOwner {
+        admins[_address] = _isAdmin;
     }
 
-    // Function to retrieve all details for a binary option
-    function getBinaryOption(uint256 _id) public validBinaryOption(_id) view returns (Storage.sanitisedBinaryOption memory) {
+    function getBinaryOption(uint256 _id)
+        public
+        view
+        validBinaryOption(_id)
+        returns (Storage.sanitisedBinaryOption memory)
+    {
         return storageContract.readBinaryOption(_id);
     }
 
-    // Function to retrieve all binary options that a user has participated in
-    // - Currently does not restrict who can call this function, but can be extended to restrict to only the user if required
-    function getUserParticipatedOptions(address _user) public view returns (uint256[] memory) {
-        return storageContract.readUserParticipatedOptions(_user);
+    function getUserParticipatedOptions() public view returns (uint256[] memory) {
+        return storageContract.readUserParticipatedOptions(msg.sender);
     }
 
-    // Function to retrieve all active binary options
     function getActiveBinaryOptions() public view returns (uint256[] memory) {
         return storageContract.readActiveBinaryOptions(); // not sorted
     }
 
-    // Function to retrieve all concluded binary options
     function getConcludedBinaryOptions() public view returns (uint256[] memory) {
         return storageContract.readConcludedBinaryOptions(); // not sorted
     }
 
-    // Function to retrieve user's long position in a binary option
     function getUserLongPosition(uint256 _id, address _user) public view returns (uint256) {
         return storageContract.readUserLongPosition(_id, _user);
     }
 
-    // Function to retrieve user's short position in a binary option
     function getUserShortPosition(uint256 _id, address _user) public view returns (uint256) {
         return storageContract.readUserShortPosition(_id, _user);
     }
 
-    // Function to create new binary option
-    function addBinaryOption(string memory _title, uint256 _start, uint256 _duration, uint256 _commissionRate) public onlyAdminOrOwner(msg.sender) validTitle(_title) validDuration(_duration) {
-        // Perform verification checks
+    function addBinaryOption(string memory _title, uint256 _start, uint256 _duration, uint256 _commissionRate)
+        public
+        onlyAdminOrOwner(msg.sender)
+        validTitle(_title)
+        validDuration(_duration)
+    {
         require(_start > block.timestamp, "Backdating the start of a binary option is not allowed");
         require(_start + _duration > block.timestamp, "Binary option must end in the future");
         require(_duration > 0, "Duration must be greater than 0");
 
-        // Instantiate binary option
         bool success = storageContract.createBinaryOption(_title, _start, _duration, _commissionRate);
-
         require(success, "Failed to create binary option");
-        emit BinaryOptionCreated(storageContract.readBinaryOptionCounter() - 1, _title, _start, _duration, _commissionRate);
+
+        emit BinaryOptionCreated(
+            storageContract.readBinaryOptionCounter() - 1, _title, _start, _duration, _commissionRate
+        );
     }
 
-    // Function to add position to binary option
-    function addPosition(uint256 _id, bool _predictedOutcome) public validStake(msg.value) validBinaryOption(_id) activeBinaryOption(_id) payable {
-        // Add position to binary option
+    function addPosition(uint256 _id, bool _predictedOutcome)
+        public
+        payable
+        validStake(msg.value)
+        validBinaryOption(_id)
+        activeBinaryOption(_id)
+    {
         bool success = storageContract.createPosition(_id, msg.sender, msg.value, _predictedOutcome);
         require(success, "Failed to add position");
 
@@ -193,8 +174,6 @@ contract OneZero is AutomationCompatibleInterface {
         }
     }
 
-    // Function for chainlink keeper to call to check if any binary options have expired
-    // - Chainlink keepers will call this method periodically
     // - Identify binary options that have expired by iterating through activeBinaryOptions array
     // - Return True and the id(s) of the expired binary option(s) if any
     // - Else return False and empty performData
@@ -207,8 +186,8 @@ contract OneZero is AutomationCompatibleInterface {
         for (uint256 i = 0; i < activeBinaryOptions.length; i++) {
             Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(activeBinaryOptions[i]);
             if (block.timestamp >= option.start + option.duration) {
-                expiredBinaryOptions[expiredCount] = activeBinaryOptions[i];  // Store expired option id
-                expiredCount++;  // Increment the count of expired options
+                expiredBinaryOptions[expiredCount] = activeBinaryOptions[i]; // Store expired option id
+                expiredCount++; // Increment the count of expired options
             }
         }
 
@@ -220,15 +199,13 @@ contract OneZero is AutomationCompatibleInterface {
 
         // If there are no expired options, return false
         if (expiredCount == 0) {
-            return (false, abi.encode(trimmedExpiredBinaryOptions));  // No upkeep needed
+            return (false, abi.encode(trimmedExpiredBinaryOptions)); // No upkeep needed
         }
 
         // Encode the result and return it
         return (true, abi.encode(trimmedExpiredBinaryOptions));
     }
 
-
-    // Function that actually concludes binary options
     // - Outcome for each binary option will only be retrieved here to prevent abuse
     // - Verification checks are also performed here again to prevent abuse
     // - Code contains computationally expensive logic if there are numerous expired binary options concluded at one go
@@ -242,15 +219,16 @@ contract OneZero is AutomationCompatibleInterface {
         }
     }
 
-
-    // Private and internal functions
-
-    // Function to conclude binary option
-    // - Safeguards taken to prevent abuse:
-    //     - Outcome is retrieved from an oracle
-    //     - Time checks performed to ensure that the binary option has indeed expired
-    //     - Checks performed to ensure that a binary option can only be concluded once
-    function concludeBinaryOption(uint256 _id) internal validBinaryOption(_id) expiredBinaryOption(_id) returns (bool) {
+    // Safeguards taken to prevent abuse:
+    // - Outcome is retrieved from an oracle
+    // - Time checks performed to ensure that the binary option has indeed expired
+    // - Checks performed to ensure that a binary option can only be concluded once
+    function concludeBinaryOption(uint256 _id)
+        internal
+        validBinaryOption(_id)
+        expiredBinaryOption(_id)
+        returns (bool)
+    {
         Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
         require(option.outcome == Storage.Outcome.notConcluded, "Binary option has already been concluded"); // Prevents a binary option from being concluded more than once
 
@@ -260,14 +238,16 @@ contract OneZero is AutomationCompatibleInterface {
         bool conclusionSuccess = storageContract.endBinaryOption(_id, outcome);
         require(conclusionSuccess, "Failed to conclude binary option");
 
-        if ((outcome && option.totalLongs != 0) || (!outcome && option.totalShorts != 0)) { // Only pay out winnings if there are winners
+        if ((outcome && option.totalLongs != 0) || (!outcome && option.totalShorts != 0)) {
+            // Only pay out winnings if there are winners
             // Pay out winnings
             bool winningPaymentSuccess = payOutWinnings(_id, outcome);
             require(winningPaymentSuccess, "Failed to pay out winnings");
         }
 
         // Pay out commission
-        if (oz.totalSupply() > 0) { // Only pay out commission if there are OZ token holders
+        if (commissionToken.totalSupply() > 0) {
+            // Only pay out commission if there are OZ token holders
             bool commissionPaymentSuccess = payOutCommission(_id);
             require(commissionPaymentSuccess, "Failed to pay out commission");
         }
@@ -276,60 +256,45 @@ contract OneZero is AutomationCompatibleInterface {
         return true;
     }
 
-    // Dummy function for retrieval of Outcome from an oracle
+    // Dummy function for retrieval of outcome from an oracle
     function retrieveOutcome(uint256 _id) internal view returns (bool) {
-        // Retrieve binary option
-        Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
+        // Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
+        // string memory id = getOptionIDForOracle(option);
+        // outcome = Oracle.getOutcome(id);
+        // return outcome;
 
-        // Derive identifier for option
-        // - Identifier will be used to retrieve outcome from oracle
-        string memory identifier = option.title; // Dummy code
-
-        bool outcome;
-
-        // Retrieve outcome from oracle using identifier
-        // - Dummy code here will always return true here but in reality outcome is retrieved from oracle
-        if (bytes(identifier).length > 0) {
-            outcome = true;
-        } else {
-            outcome = false;
-        }
-
-        return outcome;
+        return true; // return constant for testing
     }
 
-    // Function to pay out commission
     function payOutCommission(uint256 _id) internal returns (bool) {
-        uint256 totalSupply = oz.totalSupply();
-        uint256 commissionPerToken = storageContract.readBinaryOption(_id).commissionCollected * 10 ** oz.decimals() / totalSupply;
-
-        address[] memory holders = oz.getHolders();
-        for (uint256 i = 0; i < holders.length; i++) {
-            uint256 amount = oz.balanceOf(holders[i]) * commissionPerToken / 10 ** oz.decimals();
-            payable(holders[i]).transfer(amount);
-        }
-
+        uint256 totalCommission = storageContract.readBinaryOption(_id).commissionCollected;
+        commissionToken.distributeCommission{value: totalCommission}();
         emit CommissionPaid(_id);
         return true;
     }
 
-    // Function to pay out winnings
     function payOutWinnings(uint256 _id, bool _outcome) internal returns (bool) {
-        // Retrieve binary option
         Storage.sanitisedBinaryOption memory option = storageContract.readBinaryOption(_id);
         uint256 winnings = option.totalLongs + option.totalShorts;
 
-        if (_outcome) { // Long stakers won
+        if (_outcome) {
+            // Long stakers won
             address[] memory winners = option.longStakers;
-            uint256 payoutPerETHOfWinningStake = winnings * 10 ** oz.decimals() / option.totalLongs;
+            uint256 payoutPerETHOfWinningStake = winnings * 10 ** commissionToken.decimals() / option.totalLongs;
             for (uint256 i = 0; i < winners.length; i++) {
-                payable(winners[i]).transfer(payoutPerETHOfWinningStake * getUserLongPosition(_id, winners[i]) / 10 ** oz.decimals());
+                payable(winners[i]).transfer(
+                    payoutPerETHOfWinningStake * getUserLongPosition(_id, winners[i]) / 10 ** commissionToken.decimals()
+                );
             }
-        } else { // Short stakers won
+        } else {
+            // Short stakers won
             address[] memory winners = option.shortStakers;
-            uint256 payoutPerETHOfWinningStake = winnings * 10 ** oz.decimals() / option.totalShorts;
+            uint256 payoutPerETHOfWinningStake = winnings * 10 ** commissionToken.decimals() / option.totalShorts;
             for (uint256 i = 0; i < winners.length; i++) {
-                payable(winners[i]).transfer(payoutPerETHOfWinningStake * getUserShortPosition(_id, winners[i]) / 10 ** oz.decimals());
+                payable(winners[i]).transfer(
+                    payoutPerETHOfWinningStake * getUserShortPosition(_id, winners[i])
+                        / 10 ** commissionToken.decimals()
+                );
             }
         }
 
